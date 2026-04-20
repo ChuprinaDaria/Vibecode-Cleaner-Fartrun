@@ -10,10 +10,8 @@
 ![Version](https://img.shields.io/badge/version-3.0.0-green)
 ![Platform](https://img.shields.io/badge/platform-linux%20|%20macos%20|%20windows-lightgrey)
 ![MCP](https://img.shields.io/badge/MCP-29%20tools-blue)
-![Bilingual](https://img.shields.io/badge/lang-EN%20|%20UA-yellow)
 ![Hasselhoff](https://img.shields.io/badge/hasselhoff-awesome-ff69b4)
 ![License](https://img.shields.io/badge/license-Fart%20%26%20Run-brown)
-[![GitHub stars](https://img.shields.io/github/stars/ChuprinaDaria/Vibecode-Cleaner-Fartrun?style=social)](https://github.com/ChuprinaDaria/Vibecode-Cleaner-Fartrun)
 
 </div>
 
@@ -23,11 +21,43 @@
   <img src="Дизайн без назви.gif" alt="Fartrun Demo" width="800">
 </p>
 
+```
+   ____ _    ___  _____ ___  __  _ __  __
+  / __// \  | _ \|_   _| _ \| || | \ \/ /
+ | _|_| o | |   /  | | | v /| \/ |  \  /
+ |_|  |___| |_|\_\ |_| |_|_\|_||_|  |_|
+  fartrun — vibe-coder safety net, with farts
+
+  →  Scanning project at ~/my-app
+
+  ✓  Save Points: 3 (latest: "before big refactor")
+  ✓  Frozen files: 2
+  ✓  Detected stack: React 18, FastAPI, PostgreSQL
+
+  ✓  Context7 MCP: installed
+  ✓  Frozen-files hook: active (Edit/Write on frozen files is blocked)
+
+  →  Health: 87/100 — 3 dead functions, 2 missing tests
+  →  Security: 1 high (exposed .env in git history)
+  💨 The Thunderclap — Someone will find this. Soon.
+```
+
+---
+
+## Health Scanner Accuracy
+
+| Stack | Accuracy |
+|-------|----------|
+| Python (general) | **97%** |
+| Go | **97%** |
+| TypeScript / NestJS / React | **99%** |
+| FastAPI + React/Next.js | **96%** |
+| Django + DRF + Celery | **91%** |
+| **Overall** | **~95%** |
+
 ---
 
 ## Why This Isn't Another AI Checking AI
-
-If you're vibe coding with Claude, Cursor, or Copilot and have no idea what just got committed to your repo — Fartrun finds the problems before your team lead does.
 
 Every other scanner sends your code to a cloud, burns tokens analyzing it, and charges you for the privilege. Fartrun does none of that.
 
@@ -35,39 +65,6 @@ Every other scanner sends your code to a cloud, burns tokens analyzing it, and c
 - **Fast.** Tree-sitter AST parsing across thousands of files. Not "fast for a cloud service" — actually fast.
 - **Optional AI tips** via Haiku cost ~$0.001 each. That's the only money involved, and it's optional.
 - **No telemetry. No cloud. No "we only use your code to improve our service."** Just a local scan and a fart.
-- **Bilingual.** All findings, nag messages, and the GUI speak both English and Ukrainian.
-
----
-
-## Real-World Example
-
-Here's what Fartrun found on a real vibe-coded Django + React project (62 files, built entirely with AI assistants):
-
-```
-┌─────────────────────────────────────────────────────────┐
-│  fartrun scan ~/atbalance                               │
-│                                                         │
-│  51 findings: 3 high · 26 medium · 9 low · 13 info     │
-│                                                         │
-│  HIGH:                                                  │
-│  ⛔ No tests found — zero test files in the project     │
-│  ⛔ DEBUG defaults to True in settings.py               │
-│  ⛔ backend/venv/ tracked by git (7167 files!)          │
-│                                                         │
-│  MEDIUM (selected):                                     │
-│  ⚠️  SECRET_KEY falls back to insecure default          │
-│  ⚠️  npm install without lockfile in Dockerfile         │
-│  ⚠️  No API throttling — bots will hammer your forms    │
-│  ⚠️  :latest tags in docker-compose.prod.yml            │
-│  ⚠️  import * from react-icons in 2 components         │
-│  ⚠️  11 unused imports and dead classes                 │
-│  ⚠️  Copy-paste: CookiePolicy ↔ PrivacyPolicy (26 ln)  │
-│                                                         │
-│  Time: 0.8s · No tokens burned · No code uploaded       │
-└─────────────────────────────────────────────────────────┘
-```
-
-The AI built it. The AI didn't mention any of this. Fartrun did.
 
 ---
 
@@ -87,73 +84,25 @@ The AI built it. The AI didn't mention any of this. Fartrun did.
 
 ## Quick Start
 
-### 1. Download Binary (fastest)
-
-Grab the latest release for your OS:
-
-| OS | File | Install |
-|----|------|---------|
-| **Linux** | `fartrun-linux-x64.tar.gz` | `tar xzf fartrun-linux-x64.tar.gz && chmod +x fartrun` |
-| **macOS** | `fartrun-macos-x64.zip` | `unzip fartrun-macos-x64.zip` |
-| **Windows** | `fartrun-windows-x64.zip` | Extract zip |
-
-**[Download from Releases →](https://github.com/ChuprinaDaria/Vibecode-Cleaner-Fartrun/releases)**
-
-Then run:
-```bash
-./fartrun scan /path/to/project
-```
-
-<details>
-<summary><b>Platform-specific notes</b></summary>
-
-#### Linux
+### One command (recommended)
 
 ```bash
-tar xzf fartrun-linux-x64.tar.gz
-chmod +x fartrun
-./fartrun scan /path/to/project
-
-# Optional: global install
-sudo mv fartrun /usr/local/bin/
+npx fartrun@latest install
 ```
 
-#### macOS
+Downloads the binary for your OS and configures MCP in Claude Code, Cursor & Windsurf automatically.
 
 ```bash
-unzip fartrun-macos-x64.zip
-
-# If you got Fartrun.app:
-open Fartrun.app
-# CLI access:
-./Fartrun.app/Contents/MacOS/fartrun scan /path/to/project
-
-# If standalone binary:
-chmod +x fartrun
-./fartrun scan /path/to/project
+npx fartrun@latest install --claude    # Claude Code only
+npx fartrun@latest install --cursor    # Cursor only
+npx fartrun@latest install --windsurf  # Windsurf only
 ```
 
-> **Gatekeeper:** macOS may block unsigned apps. Run once:
-> ```bash
-> xattr -d com.apple.quarantine fartrun
-> ```
-> Signed & notarized builds coming soon.
+### Desktop (binary)
 
-#### Windows
+Download from [Releases](https://github.com/ChuprinaDaria/Vibecode-Cleaner-Fartrun/releases).
 
-1. Extract `fartrun-windows-x64.zip`
-2. Open PowerShell in the extracted folder
-3. Run:
-```powershell
-.\fartrun.exe scan C:\path\to\project
-```
-
-> **SmartScreen:** Windows may show "Unknown publisher". Click "More info" → "Run anyway". Code-signed builds coming soon.
-
-</details>
-
-<details>
-<summary><b>From source</b></summary>
+### From source
 
 ```bash
 git clone https://github.com/ChuprinaDaria/Vibecode-Cleaner-Fartrun.git
@@ -161,9 +110,27 @@ cd Vibecode-Cleaner-Fartrun
 pip install -e ".[http]"
 ```
 
-</details>
+### CLI
 
-### 2. MCP — stdio (Claude Code)
+```bash
+fartrun scan /path/to/project    # Health scan → MD report
+fartrun save "before refactoring" # Save point
+fartrun rollback 1                # Undo everything
+fartrun gui                       # Win95 GUI
+```
+
+After a full health scan you get a `.md` report in `.fartrun/reports/` — already formatted for Claude Code context. Paste it into your prompt or let the MCP tool feed it directly. No copy-pasting JSON, no parsing logs. Just a structured markdown that Claude actually understands: findings, severity, file paths, and fix suggestions — ready to act on.
+
+![Health report output](health-report-output.png)
+
+---
+
+## MCP Setup (manual)
+
+If you prefer manual config over `npx fartrun@latest install`:
+
+<details>
+<summary>Claude Code — stdio</summary>
 
 ```json
 {
@@ -172,8 +139,10 @@ pip install -e ".[http]"
   }
 }
 ```
+</details>
 
-### 3. MCP — HTTP (Cursor / Windsurf / web)
+<details>
+<summary>Cursor / Windsurf — HTTP</summary>
 
 ```bash
 fartrun mcp --http --port 3001
@@ -186,48 +155,7 @@ fartrun mcp --http --port 3001
   }
 }
 ```
-
-### 4. CLI
-
-```bash
-fartrun scan /path/to/project       # Full health scan → terminal report
-fartrun scan -v /path/to/project    # Verbose — includes info-level findings
-fartrun status                      # Project overview: save points, frozen files, stack
-fartrun save "before refactoring"   # Save point (git snapshot you can rollback to)
-fartrun rollback 1                  # Undo everything since save point #1
-fartrun freeze src/config.py        # Lock file — AI can't edit it
-fartrun unfreeze src/config.py      # Unlock file
-fartrun list                        # Show all save points + frozen files
-fartrun prompt "add auth to API"    # Turn one-liner into structured prompt for Claude
-fartrun mcp                         # Start MCP server (stdio)
-fartrun mcp --http --port 3001      # Start MCP server (HTTP/SSE for Cursor/Windsurf)
-python -m gui.app                   # Win95 GUI
-```
-
-| Command | What it does |
-|---------|-------------|
-| `scan` | 9-phase health check: dead code, tech debt, tests, git hygiene, framework issues, docs. Color-coded output, `-v` for details |
-| `status` | Quick overview — save points, frozen files, detected stack, Context7/hook status |
-| `save` / `rollback` | Git-based checkpoints. Save before AI touches your code, rollback when it breaks things |
-| `freeze` / `unfreeze` | Lock files from AI edits. Syncs with CLAUDE.md + optional Claude Code hook |
-| `list` | Show all save points and frozen files for current project |
-| `prompt` | Turns "fix the login" into a structured prompt with file paths, stack context, and keywords |
-| `mcp` | MCP server — stdio (Claude Code) or HTTP/SSE (Cursor, Windsurf) |
-
----
-
-## Fartrun vs Cloud Scanners
-
-| | **Fartrun** | Snyk | SonarQube | Semgrep Cloud |
-|---|---|---|---|---|
-| Runs locally | Yes | No | Self-host option | No |
-| Code leaves your machine | Never | Yes | Depends | Yes |
-| Free | Forever | Freemium | Freemium | Freemium |
-| AI vibe-code specific checks | Yes | No | No | No |
-| Scan time (1K files) | <2s | 30-60s | 20-40s | 10-20s |
-| Setup time | 0 (binary) | Account + CLI | Server + config | Account + CLI |
-| Fart sounds | Yes | No | No | No |
-| Hasselhoff | Yes | No | No | No |
+</details>
 
 ---
 
@@ -246,30 +174,26 @@ python -m gui.app                   # Win95 GUI
 
 ## Farts & Hasselhoff
 
-| Severity | Classic | Fart Mode | What it means |
-|----------|---------|-----------|---------------|
-| Critical | Air raid siren | The Devastator | Your secrets are already on Pastebin |
-| High | Alarm bell | The Thunderclap | Someone will find this. Soon. |
-| Medium | Warning beep | The Squeaker | Not great, not terrible |
-| Low | Gentle ping | The Whisper | Technically a finding. Relax. |
-| Info | Soft chime | The Silent But Deadly | Good to know. Carry on. |
+Two fart sounds. That's it. We didn't need more.
 
-Hasselhoff used to appear for everything. Container started? Hasselhoff. You blinked? Hasselhoff. Beta testers staged an intervention. Now he only shows up when summoned. He's still watching though.
+| Finding | You hear |
+|---------|----------|
+| Something's off | A polite, restrained poot. A gentleman's warning. |
+| Something's very off | The full experience. Neighbors will ask questions. |
 
----
+### Optional: Hasselhoff Mode
 
-## Health Scanner Accuracy
+For those who need _inspiration_ to fix their code, enable Hasselhoff mode. Three songs. Handpicked. Peer-reviewed by David himself (not really).
 
-Tested on 12 real projects across 6 stacks:
+| Song | When it plays | Motivational effect |
+|------|--------------|---------------------|
+| **Looking for Freedom** | Critical findings detected | You're looking for freedom from your own code. You won't find it. |
+| **True Survivor** | You actually fix everything | Congratulations survivor. The Hoff is proud. |
+| **Du** | Easter egg | If you know, you know. If you don't — you're not ready. |
 
-| Stack | Example project | Accuracy |
-|-------|----------------|----------|
-| Python (general) | Flask REST API, CLI tools | **97%** |
-| Go | gRPC microservice | **97%** |
-| TypeScript / NestJS / React | SaaS dashboard | **99%** |
-| FastAPI + React/Next.js | AI chatbot with RAG | **96%** |
-| Django + DRF + Celery | Business CRM, landing pages | **91%** |
-| **Overall** | | **~95%** |
+Hasselhoff used to appear for everything. Container started? Hasselhoff. You opened a terminal? Hasselhoff. Beta testers staged an intervention. Now he only shows up when summoned.
+
+He's still watching though.
 
 ---
 
@@ -281,14 +205,6 @@ Tested on 12 real projects across 6 stacks:
 | Sound | pw-play / paplay / aplay | afplay | PowerShell SoundPlayer |
 | Firewall | ufw / nftables / iptables | socketfilterfw / pf | netsh advfirewall |
 | Config | `~/.config/claude-monitor/` | `~/Library/Application Support/` | `%APPDATA%\claude-monitor\` |
-
----
-
-## Star If It Saved You Once
-
-That's it. Stars = visibility = more people not getting fired.
-
-[![GitHub stars](https://img.shields.io/github/stars/ChuprinaDaria/Vibecode-Cleaner-Fartrun?style=social)](https://github.com/ChuprinaDaria/Vibecode-Cleaner-Fartrun)
 
 ---
 

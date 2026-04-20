@@ -136,18 +136,11 @@ function configureMcp(binaryPath, client) {
     }
   }
 
-  if (client === "claude-code") {
-    if (!settings.mcpServers) settings.mcpServers = {};
-    settings.mcpServers.fartrun = {
-      command: binaryPath + "-mcp",
-    };
-  } else {
-    if (!settings.mcpServers) settings.mcpServers = {};
-    settings.mcpServers.fartrun = {
-      command: binaryPath,
-      args: ["mcp"],
-    };
-  }
+  if (!settings.mcpServers) settings.mcpServers = {};
+  settings.mcpServers.fartrun = {
+    command: binaryPath,
+    args: ["mcp"],
+  };
 
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
   console.log(`${GREEN}MCP configured in ${settingsPath}${RESET}`);
@@ -156,13 +149,15 @@ function configureMcp(binaryPath, client) {
 
 function printUsage() {
   console.log(`${LOGO}
+  Installs MCP server only. Desktop GUI → Releases page.
+
 ${GREEN}Usage:${RESET}
-  npx fartrun@latest install          Download binary + configure MCP
-  npx fartrun@latest install --claude  Configure for Claude Code only
-  npx fartrun@latest install --cursor  Configure for Cursor only
-  npx fartrun@latest install --windsurf Configure for Windsurf only
-  npx fartrun@latest mcp-config       Show MCP JSON config (manual setup)
-  npx fartrun@latest --help           This message
+  npx fartrun@latest install           Download MCP binary + configure editor
+  npx fartrun@latest install --claude   Claude Code only
+  npx fartrun@latest install --cursor   Cursor only
+  npx fartrun@latest install --windsurf Windsurf only
+  npx fartrun@latest mcp-config        Show MCP JSON config (manual setup)
+  npx fartrun@latest --help            This message
 
 ${DIM}29 MCP tools. Rust security scanner. Zero tokens. Maximum flatulence.${RESET}
 `);
@@ -172,10 +167,10 @@ function printMcpConfig() {
   const installDir = getInstallDir();
   const bin = path.join(installDir, os.platform() === "win32" ? "fartrun.exe" : "fartrun");
 
-  console.log(`${GREEN}stdio (Claude Code settings.json):${RESET}
+  console.log(`${GREEN}stdio (Claude Code / Cursor / Windsurf):${RESET}
 {
   "mcpServers": {
-    "fartrun": { "command": "${bin}-mcp" }
+    "fartrun": { "command": "${bin}", "args": ["mcp"] }
   }
 }
 
@@ -192,7 +187,7 @@ Run: ${bin} mcp --http --port 3001
 
 async function install(flags) {
   console.log(LOGO);
-  console.log("Installing Fartrun...\n");
+  console.log("Installing Fartrun MCP server...\n");
 
   const binaryPath = await downloadBinary();
 
@@ -211,9 +206,12 @@ async function install(flags) {
 ${GREEN}Done!${RESET} Fartrun MCP is ready.
 
   ${DIM}29 tools available. Restart your editor to pick them up.${RESET}
-  ${DIM}Run "fartrun scan ." to try the CLI.${RESET}
+  ${DIM}Run "fartrun scan ." to try the CLI scanner.${RESET}
 
   ${YELLOW}Make sure ${getInstallDir()} is in your PATH${RESET}
+
+  ${DIM}Desktop GUI → download separately from Releases:${RESET}
+  ${DIM}https://github.com/${REPO}/releases${RESET}
 `);
 }
 
