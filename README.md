@@ -92,6 +92,8 @@ npx fartrun@latest install
 
 Downloads the binary for your OS and configures MCP in Claude Code, Cursor & Windsurf automatically.
 
+![MCP install output](mcp-install-output.png)
+
 ```bash
 npx fartrun@latest install --claude    # Claude Code only
 npx fartrun@latest install --cursor    # Cursor only
