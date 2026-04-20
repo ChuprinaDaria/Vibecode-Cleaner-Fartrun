@@ -119,6 +119,10 @@ fartrun rollback 1                # Undo everything
 fartrun gui                       # Win95 GUI
 ```
 
+After a full health scan, you get a ready-to-read `.md` report in `.fartrun/reports/`:
+
+![Health report output](health-report-output.png)
+
 ---
 
 ## MCP Setup (manual)
