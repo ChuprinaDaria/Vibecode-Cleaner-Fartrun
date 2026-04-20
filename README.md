@@ -232,6 +232,14 @@ All donations go toward toilet paper, coffee, and finding the perfect fart sound
 
 ---
 
+## Documentation
+
+Full technical wiki: **[Wiki →](https://github.com/ChuprinaDaria/Vibecode-Cleaner-Fartrun/wiki)**
+
+14 pages covering architecture, all CLI commands, MCP tools reference, health scanner phases, security modules, plugin system, configuration, and how AI agents should use findings.
+
+---
+
 ## Contributing
 
 PRs welcome. Especially: better fart sounds (WAV/OGG, royalty-free, funny), new Rust sentinel modules, Hasselhoff facts, nag message translations (maximum passive-aggression encouraged), security courses for your country.
