@@ -174,15 +174,26 @@ fartrun mcp --http --port 3001
 
 ## Farts & Hasselhoff
 
-| Severity | Classic | Fart Mode | What it means |
-|----------|---------|-----------|---------------|
-| Critical | Air raid siren | The Devastator | Your secrets are already on Pastebin |
-| High | Alarm bell | The Thunderclap | Someone will find this. Soon. |
-| Medium | Warning beep | The Squeaker | Not great, not terrible |
-| Low | Gentle ping | The Whisper | Technically a finding. Relax. |
-| Info | Soft chime | The Silent But Deadly | Good to know. Carry on. |
+Two fart sounds. That's it. We didn't need more.
 
-Hasselhoff used to appear for everything. Container started? Hasselhoff. You blinked? Hasselhoff. Beta testers staged an intervention. Now he only shows up when summoned. He's still watching though.
+| Finding | You hear |
+|---------|----------|
+| Something's off | A polite, restrained poot. A gentleman's warning. |
+| Something's very off | The full experience. Neighbors will ask questions. |
+
+### Optional: Hasselhoff Mode
+
+For those who need _inspiration_ to fix their code, enable Hasselhoff mode. Three songs. Handpicked. Peer-reviewed by David himself (not really).
+
+| Song | When it plays | Motivational effect |
+|------|--------------|---------------------|
+| **Looking for Freedom** | Critical findings detected | You're looking for freedom from your own code. You won't find it. |
+| **True Survivor** | You actually fix everything | Congratulations survivor. The Hoff is proud. |
+| **Du** | Easter egg | If you know, you know. If you don't — you're not ready. |
+
+Hasselhoff used to appear for everything. Container started? Hasselhoff. You opened a terminal? Hasselhoff. Beta testers staged an intervention. Now he only shows up when summoned.
+
+He's still watching though.
 
 ---
 
