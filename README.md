@@ -17,7 +17,9 @@
 
 ---
 
-> GIF demo — coming soon
+<p align="center">
+  <img src="Дизайн без назви.gif" alt="Fartrun Demo" width="800">
+</p>
 
 ---
 
@@ -177,7 +179,7 @@ PRs welcome. Especially: better fart sounds (WAV/OGG, royalty-free, funny), new 
 ## Fart & Run License
 
 ```
-FART & RUN LICENSE v1.0 — Copyright (c) 2026 Lazysoft
+FART & RUN LICENSE v1.0 — Copyright (c) 2026 Daria Chuprina
 
 1. You may fart and run, but you must attribute the original farter.
 2. You may not mass-fart on production servers you don't own.
