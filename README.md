@@ -190,11 +190,29 @@ fartrun mcp --http --port 3001
 ### 4. CLI
 
 ```bash
-fartrun scan /path/to/project    # Health scan → MD report
-fartrun save "before refactoring" # Save point
-fartrun rollback 1                # Undo everything
-python -m gui.app                 # Win95 GUI
+fartrun scan /path/to/project       # Full health scan → terminal report
+fartrun scan -v /path/to/project    # Verbose — includes info-level findings
+fartrun status                      # Project overview: save points, frozen files, stack
+fartrun save "before refactoring"   # Save point (git snapshot you can rollback to)
+fartrun rollback 1                  # Undo everything since save point #1
+fartrun freeze src/config.py        # Lock file — AI can't edit it
+fartrun unfreeze src/config.py      # Unlock file
+fartrun list                        # Show all save points + frozen files
+fartrun prompt "add auth to API"    # Turn one-liner into structured prompt for Claude
+fartrun mcp                         # Start MCP server (stdio)
+fartrun mcp --http --port 3001      # Start MCP server (HTTP/SSE for Cursor/Windsurf)
+python -m gui.app                   # Win95 GUI
 ```
+
+| Command | What it does |
+|---------|-------------|
+| `scan` | 9-phase health check: dead code, tech debt, tests, git hygiene, framework issues, docs. Color-coded output, `-v` for details |
+| `status` | Quick overview — save points, frozen files, detected stack, Context7/hook status |
+| `save` / `rollback` | Git-based checkpoints. Save before AI touches your code, rollback when it breaks things |
+| `freeze` / `unfreeze` | Lock files from AI edits. Syncs with CLAUDE.md + optional Claude Code hook |
+| `list` | Show all save points and frozen files for current project |
+| `prompt` | Turns "fix the login" into a structured prompt with file paths, stack context, and keywords |
+| `mcp` | MCP server — stdio (Claude Code) or HTTP/SSE (Cursor, Windsurf) |
 
 ---
 
