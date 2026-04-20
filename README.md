@@ -119,7 +119,7 @@ fartrun rollback 1                # Undo everything
 fartrun gui                       # Win95 GUI
 ```
 
-After a full health scan, you get a ready-to-read `.md` report in `.fartrun/reports/`:
+After a full health scan you get a `.md` report in `.fartrun/reports/` — already formatted for Claude Code context. Paste it into your prompt or let the MCP tool feed it directly. No copy-pasting JSON, no parsing logs. Just a structured markdown that Claude actually understands: findings, severity, file paths, and fix suggestions — ready to act on.
 
 ![Health report output](health-report-output.png)
 
