@@ -21,6 +21,40 @@
   <img src="Дизайн без назви.gif" alt="Fartrun Demo" width="800">
 </p>
 
+```
+   ____ _    ___  _____ ___  __  _ __  __
+  / __// \  | _ \|_   _| _ \| || | \ \/ /
+ | _|_| o | |   /  | | | v /| \/ |  \  /
+ |_|  |___| |_|\_\ |_| |_|_\|_||_|  |_|
+  fartrun — vibe-coder safety net, with farts
+
+  →  Scanning project at ~/my-app
+
+  ✓  Save Points: 3 (latest: "before big refactor")
+  ✓  Frozen files: 2
+  ✓  Detected stack: React 18, FastAPI, PostgreSQL
+
+  ✓  Context7 MCP: installed
+  ✓  Frozen-files hook: active (Edit/Write on frozen files is blocked)
+
+  →  Health: 87/100 — 3 dead functions, 2 missing tests
+  →  Security: 1 high (exposed .env in git history)
+  💨 The Thunderclap — Someone will find this. Soon.
+```
+
+---
+
+## Health Scanner Accuracy
+
+| Stack | Accuracy |
+|-------|----------|
+| Python (general) | **97%** |
+| Go | **97%** |
+| TypeScript / NestJS / React | **99%** |
+| FastAPI + React/Next.js | **96%** |
+| Django + DRF + Celery | **91%** |
+| **Overall** | **~95%** |
+
 ---
 
 ## Why This Isn't Another AI Checking AI
@@ -50,6 +84,20 @@ Every other scanner sends your code to a cloud, burns tokens analyzing it, and c
 
 ## Quick Start
 
+### One command (recommended)
+
+```bash
+npx fartrun@latest install
+```
+
+Downloads the binary for your OS and configures MCP in Claude Code, Cursor & Windsurf automatically.
+
+```bash
+npx fartrun@latest install --claude    # Claude Code only
+npx fartrun@latest install --cursor    # Cursor only
+npx fartrun@latest install --windsurf  # Windsurf only
+```
+
 ### Desktop (binary)
 
 Download from [Releases](https://github.com/ChuprinaDaria/Vibecode-Cleaner-Fartrun/releases).
@@ -62,7 +110,23 @@ cd Vibecode-Cleaner-Fartrun
 pip install -e ".[http]"
 ```
 
-### MCP — stdio (Claude Code / settings.json)
+### CLI
+
+```bash
+fartrun scan /path/to/project    # Health scan → MD report
+fartrun save "before refactoring" # Save point
+fartrun rollback 1                # Undo everything
+fartrun gui                       # Win95 GUI
+```
+
+---
+
+## MCP Setup (manual)
+
+If you prefer manual config over `npx fartrun@latest install`:
+
+<details>
+<summary>Claude Code — stdio</summary>
 
 ```json
 {
@@ -71,8 +135,10 @@ pip install -e ".[http]"
   }
 }
 ```
+</details>
 
-### MCP — HTTP (Cursor / Windsurf / web)
+<details>
+<summary>Cursor / Windsurf — HTTP</summary>
 
 ```bash
 fartrun mcp --http --port 3001
@@ -85,15 +151,7 @@ fartrun mcp --http --port 3001
   }
 }
 ```
-
-### CLI
-
-```bash
-fartrun scan /path/to/project    # Health scan → MD report
-fartrun save "before refactoring" # Save point
-fartrun rollback 1                # Undo everything
-python -m gui.app                 # Win95 GUI
-```
+</details>
 
 ---
 
@@ -121,21 +179,6 @@ python -m gui.app                 # Win95 GUI
 | Info | Soft chime | The Silent But Deadly | Good to know. Carry on. |
 
 Hasselhoff used to appear for everything. Container started? Hasselhoff. You blinked? Hasselhoff. Beta testers staged an intervention. Now he only shows up when summoned. He's still watching though.
-
----
-
-## Health Scanner Accuracy
-
-Tested on 12 real projects across 6 stacks:
-
-| Stack | Accuracy |
-|-------|----------|
-| Python (general) | **97%** |
-| Go | **97%** |
-| TypeScript / NestJS / React | **99%** |
-| FastAPI + React/Next.js | **96%** |
-| Django + DRF + Celery | **91%** |
-| **Overall** | **~95%** |
 
 ---
 

@@ -1,0 +1,23 @@
+{
+  "name": "fartrun",
+  "version": "3.0.0",
+  "description": "Your AI wrote the code. We check if it'll get you fired. MCP installer for Claude Code, Cursor & Windsurf.",
+  "keywords": ["mcp", "security", "scanner", "vibe-coding", "claude-code", "cursor", "windsurf", "code-health"],
+  "author": "Daria Chuprina <dchuprina@lazysoft.pl>",
+  "license": "SEE LICENSE IN LICENSE",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ChuprinaDaria/Vibecode-Cleaner-Fartrun"
+  },
+  "homepage": "https://github.com/ChuprinaDaria/Vibecode-Cleaner-Fartrun",
+  "bin": {
+    "fartrun": "./bin/cli.js"
+  },
+  "files": [
+    "bin/",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  }
+}
