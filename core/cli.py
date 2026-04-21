@@ -9,6 +9,7 @@ Subcommands:
     fartrun list         show Save Points + Frozen Files
     fartrun prompt <t>   turn loose text into a structured prompt
     fartrun scan         quick security score preview
+    fartrun gui          launch the desktop GUI
 """
 
 from __future__ import annotations
@@ -443,6 +444,20 @@ def cmd_hook_uninstall(args) -> int:
     return 0
 
 
+def cmd_gui(args) -> int:
+    """Launch the PyQt5 desktop GUI."""
+    print_logo()
+    step("Launching desktop GUI...")
+    try:
+        from gui.app import main as gui_main
+        gui_main()
+    except ImportError:
+        err("PyQt5 is not installed.")
+        tip("Install it with:  pip install PyQt5")
+        return 1
+    return 0
+
+
 # ------------------------------------------------------------ entrypoint
 
 def build_parser() -> argparse.ArgumentParser:
@@ -516,6 +531,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp_hu = sub.add_parser("hook-uninstall",
                              help="remove the frozen-files hook")
     sp_hu.set_defaults(func=cmd_hook_uninstall)
+
+    sp_gui = sub.add_parser("gui", help="launch the desktop GUI")
+    sp_gui.set_defaults(func=cmd_gui)
 
     return p
 
