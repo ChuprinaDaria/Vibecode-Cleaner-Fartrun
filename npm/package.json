@@ -1,6 +1,6 @@
 {
   "name": "fartrun",
-  "version": "3.0.1",
+  "version": "3.0.3",
   "description": "MCP server installer — Rust-powered code scanner for vibe-coded projects. 29 tools, zero tokens, zero cloud.",
   "keywords": ["mcp", "security", "scanner", "vibe-coding", "claude-code", "cursor", "windsurf", "code-health"],
   "author": "Daria Chuprina <dchuprina@lazysoft.pl>",

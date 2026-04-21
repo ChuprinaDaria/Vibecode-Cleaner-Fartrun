@@ -10,7 +10,7 @@ from PyQt5.QtWidgets import (
 from i18n import get_string as _t
 
 
-VERSION = "3.0.0"
+VERSION = "3.0.3"
 
 CONTACTS = [
     ("LinkedIn", "https://www.linkedin.com/in/dchuprina/"),
