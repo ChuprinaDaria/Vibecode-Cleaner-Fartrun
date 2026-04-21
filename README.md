@@ -7,7 +7,7 @@
 > *"Auditory feedback increases developer response time to critical vulnerabilities by 340%. We chose the most primal auditory signal known to humanity."*
 > — Fartrun Institute of Applied Flatulence, 2026 (peer-reviewed by nobody)
 
-![Version](https://img.shields.io/badge/version-3.0.3-green)
+![Version](https://img.shields.io/badge/version-3.0.4-green)
 ![Platform](https://img.shields.io/badge/platform-linux%20|%20macos%20|%20windows-lightgrey)
 ![MCP](https://img.shields.io/badge/MCP-29%20tools-blue)
 ![Hasselhoff](https://img.shields.io/badge/hasselhoff-awesome-ff69b4)

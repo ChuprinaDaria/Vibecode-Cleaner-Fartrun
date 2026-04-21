@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import (
 )
 
 
-VERSION = "3.0.3"
+VERSION = "3.0.4"
 
 CONTACTS = [
     ("LinkedIn", "https://www.linkedin.com/in/dchuprina/"),
