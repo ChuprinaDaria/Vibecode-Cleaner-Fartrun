@@ -11,7 +11,8 @@
 ![Platform](https://img.shields.io/badge/platform-linux%20|%20macos%20|%20windows-lightgrey)
 ![MCP](https://img.shields.io/badge/MCP-29%20tools-blue)
 ![Hasselhoff](https://img.shields.io/badge/hasselhoff-awesome-ff69b4)
-![License](https://img.shields.io/badge/license-Fart%20%26%20Run-brown)
+![License](https://img.shields.io/badge/license-MIT-blue)
+![Open Source](https://img.shields.io/badge/source-open-brightgreen)
 
 </div>
 
@@ -54,6 +55,12 @@
 | FastAPI + React/Next.js | **96%** |
 | Django + DRF + Celery | **91%** |
 | **Overall** | **~95%** |
+
+---
+
+> **v3.0.3 — Full source code is now open.** Python core, Rust crates, PyQt5 GUI, 80+ tests, 4 plugins — everything.
+> No more closed binaries. Build from source, audit the code, contribute.
+> PRs welcome. See [Contributing](#contributing).
 
 ---
 
@@ -109,7 +116,17 @@ Download from [Releases](https://github.com/ChuprinaDaria/Vibecode-Cleaner-Fartr
 ```bash
 git clone https://github.com/ChuprinaDaria/Vibecode-Cleaner-Fartrun.git
 cd Vibecode-Cleaner-Fartrun
-pip install -e ".[http]"
+pip install -e ".[http]"        # Core + HTTP MCP server
+
+# Rust crates (optional, for native speed)
+cd crates/health && maturin develop --release && cd ../..
+cd crates/sentinel && maturin develop --release && cd ../..
+
+# Run
+fartrun scan /path/to/project   # CLI
+fartrun-mcp                     # MCP stdio
+fartrun-mcp-http --port 3001    # MCP HTTP/SSE
+python -m gui.app               # Desktop GUI (requires PyQt5)
 ```
 
 ### CLI
@@ -246,21 +263,17 @@ PRs welcome. Especially: better fart sounds (WAV/OGG, royalty-free, funny), new 
 
 ---
 
-## Fart & Run License
+## License
 
-```
-FART & RUN LICENSE v1.0 — Copyright (c) 2026 Daria Chuprina
+**MIT** — see [LICENSE](LICENSE) for the real one.
 
-1. You may fart and run, but you must attribute the original farter.
-2. You may not mass-fart on production servers you don't own.
-3. THE SOFTWARE IS PROVIDED "AS IS". If it misses a vulnerability,
-   that's on you for trusting a scanner named after flatulence.
-4. Hasselhoff appearances are AS-AVAILABLE, not guaranteed.
-5. Nag messages are a feature. Disabling them voids your warranty
-   (you never had one).
-6. The "Silent But Deadly" mode is exactly what it sounds like.
-   And doesn't sound like.
-```
+Plus the supplementary **Fart & Run License v1.0** (for vibes):
+
+> 1. You may fart and run, but you must attribute the original farter.
+> 2. You may not mass-fart on production servers you don't own.
+> 3. Hasselhoff appearances are AS-AVAILABLE, not guaranteed.
+> 4. Nag messages are a feature. Disabling them voids your warranty (you never had one).
+> 5. The "Silent But Deadly" mode is exactly what it sounds like. And doesn't sound like.
 
 ---
 
