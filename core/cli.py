@@ -101,7 +101,7 @@ def cmd_status(args) -> int:
     from core import context7_mcp as c7
     from core import frozen_manager as fm
 
-    project = _project_dir(args.dir)
+    project = _project_dir(getattr(args, "path", None) or args.dir)
     print_logo()
     step(f"Scanning project at {c(BOLD)}{project}{c(RESET)}")
 
@@ -347,7 +347,7 @@ def cmd_scan(args) -> int:
     import shutil
     from core.health.project_map import run_all_checks
 
-    project = _project_dir(args.dir)
+    project = _project_dir(getattr(args, "path", None) or args.dir)
     print_logo()
     step(f"Health scan: {c(BOLD)}{project}{c(RESET)}")
     print()
@@ -476,6 +476,8 @@ def build_parser() -> argparse.ArgumentParser:
         sp.add_argument("--dir", "-C", help="project directory (default: CWD)")
 
     sp_status = sub.add_parser("status", help="overview of the current project")
+    sp_status.add_argument("path", nargs="?", default=None,
+                           help="project directory (default: CWD)")
     with_dir(sp_status)
     sp_status.set_defaults(func=cmd_status)
 
@@ -521,6 +523,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp_prompt.set_defaults(func=cmd_prompt)
 
     sp_scan = sub.add_parser("scan", help="full health scan → terminal report")
+    sp_scan.add_argument("path", nargs="?", default=None,
+                         help="project directory (default: CWD)")
     sp_scan.add_argument("-v", "--verbose", action="store_true",
                          help="show info-level findings and detailed messages")
     with_dir(sp_scan)
