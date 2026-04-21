@@ -66,13 +66,15 @@ jobs:
           name: fartrun-windows-x64
           path: fartrun-windows-x64.zip
 
-  # ─── macOS x64 (Intel, sign + notarize) ───
+  # ─── macOS x64 (Intel via Rosetta on ARM runner) ───
   build-macos-x64:
-    runs-on: macos-13
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: { python-version: "${{ env.PYTHON_VERSION }}" }
+        with:
+          python-version: "${{ env.PYTHON_VERSION }}"
+          architecture: x64
       - uses: dtolnay/rust-toolchain@stable
         with: { targets: x86_64-apple-darwin }
 
@@ -83,7 +85,7 @@ jobs:
           python -m pip install maturin pyinstaller ".[http]"
           cd crates/health && maturin develop --release --target x86_64-apple-darwin && cd ../..
           cd crates/sentinel && maturin develop --release --target x86_64-apple-darwin && cd ../..
-          pyinstaller fartrun.spec --noconfirm
+          arch -x86_64 .venv/bin/pyinstaller fartrun.spec --noconfirm
 
       - name: Codesign
         continue-on-error: true
