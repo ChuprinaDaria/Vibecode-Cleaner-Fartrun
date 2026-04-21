@@ -79,9 +79,10 @@ jobs:
         run: |
           arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" </dev/null
           eval "$(/usr/local/bin/brew shellenv)"
-          brew install python@3.11
-          /usr/local/opt/python@3.11/bin/python3.11 --version
-          file /usr/local/opt/python@3.11/bin/python3.11
+          brew install python@3.11 || true
+          brew link --overwrite python@3.11 || true
+          /usr/local/Cellar/python@3.11/*/bin/python3.11 --version
+          file /usr/local/Cellar/python@3.11/*/bin/python3.11
 
       - uses: dtolnay/rust-toolchain@stable
         with: { targets: x86_64-apple-darwin }
@@ -89,7 +90,8 @@ jobs:
       - name: Build
         run: |
           eval "$(/usr/local/bin/brew shellenv)"
-          /usr/local/opt/python@3.11/bin/python3.11 -m venv .venv
+          PYTHON_X64=$(/usr/local/Cellar/python@3.11/*/bin/python3.11 -c "import sys; print(sys.executable)")
+          $PYTHON_X64 -m venv .venv
           source .venv/bin/activate
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install maturin pyinstaller ".[http]"
