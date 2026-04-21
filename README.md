@@ -229,6 +229,16 @@ He's still watching though.
 
 ---
 
+## Wall of Scans
+
+Real scan results from real projects. No names, no shame — just the output.
+
+Got a scan screenshot? Drop it in a [PR](https://github.com/ChuprinaDaria/Vibecode-Cleaner-Fartrun/pulls) or [issue](https://github.com/ChuprinaDaria/Vibecode-Cleaner-Fartrun/issues) — it helps improve the scanner.
+
+See what others found: [`reviews/`](reviews/)
+
+---
+
 ## Buy Me a Toilet Paper
 
 This project is free. Forever. No premium tier. No "enterprise edition."
