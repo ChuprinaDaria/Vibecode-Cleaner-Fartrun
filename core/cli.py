@@ -346,6 +346,7 @@ def cmd_scan(args) -> int:
     """Run full health scan and print findings to terminal."""
     import shutil
     from core.health.project_map import run_all_checks
+    from core.health.report_md import save_report_md
 
     project = _project_dir(args.dir)
     print_logo()
@@ -403,7 +404,10 @@ def cmd_scan(args) -> int:
            f"{ft.get('total_dirs', '?')} dirs · "
            f"{ft.get('total_size_bytes', 0) // 1024} KB")
 
+    # Save .md report
+    report_path = save_report_md(report)
     print()
+    ok(f"Report saved: {c(BOLD)}{report_path}{c(RESET)}")
     tip("Want AI to fix these? Pipe findings into Claude Code with:\n"
         f"      {c(PINK)}fartrun prompt \"fix health scan issues\"{c(RESET)}")
     return 0
