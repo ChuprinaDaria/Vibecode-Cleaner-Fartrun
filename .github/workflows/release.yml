@@ -12,7 +12,7 @@ env:
   PYTHON_VERSION: "3.11"
 
 jobs:
-  # ─── Linux ───
+  # ─── Linux x64 ───
   build-linux:
     runs-on: ubuntu-latest
     steps:
@@ -37,7 +37,7 @@ jobs:
           name: fartrun-linux-x64
           path: fartrun-linux-x64.tar.gz
 
-  # ─── Windows ───
+  # ─── Windows x64 ───
   build-windows:
     runs-on: windows-latest
     steps:
@@ -66,9 +66,9 @@ jobs:
           name: fartrun-windows-x64
           path: fartrun-windows-x64.zip
 
-  # ─── macOS (sign + notarize) ───
-  build-macos:
-    runs-on: macos-latest
+  # ─── macOS x64 (Intel, sign + notarize) ───
+  build-macos-x64:
+    runs-on: macos-13
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -81,15 +81,17 @@ jobs:
           python -m venv .venv && source .venv/bin/activate
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install maturin pyinstaller ".[http]"
-          cd crates/health && maturin develop --release && cd ../..
-          cd crates/sentinel && maturin develop --release && cd ../..
+          cd crates/health && maturin develop --release --target x86_64-apple-darwin && cd ../..
+          cd crates/sentinel && maturin develop --release --target x86_64-apple-darwin && cd ../..
           pyinstaller fartrun.spec --noconfirm
 
       - name: Codesign
+        continue-on-error: true
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: |
+          if [ -z "$APPLE_CERTIFICATE" ]; then echo "No signing cert — skipping codesign"; exit 0; fi
           echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
           security create-keychain -p "" build.keychain
           security default-keychain -s build.keychain
@@ -109,6 +111,7 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
+          if [ -z "$APPLE_ID" ]; then echo "No Apple ID — skipping notarize"; exit 0; fi
           cd dist
           zip -r ../notarize.zip Fartrun.app 2>/dev/null || zip -r ../notarize.zip fartrun
           cd ..
@@ -128,14 +131,94 @@ jobs:
           name: fartrun-macos-x64
           path: fartrun-macos-x64.zip
 
-  # ─── Release (Linux + Windows, doesn't wait for macOS) ───
+  # ─── macOS arm64 (Apple Silicon, sign + notarize) ───
+  build-macos-arm64:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "${{ env.PYTHON_VERSION }}" }
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: aarch64-apple-darwin }
+
+      - name: Build
+        run: |
+          python -m venv .venv && source .venv/bin/activate
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install maturin pyinstaller ".[http]"
+          cd crates/health && maturin develop --release --target aarch64-apple-darwin && cd ../..
+          cd crates/sentinel && maturin develop --release --target aarch64-apple-darwin && cd ../..
+          pyinstaller fartrun.spec --noconfirm
+
+      - name: Codesign
+        continue-on-error: true
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          if [ -z "$APPLE_CERTIFICATE" ]; then echo "No signing cert — skipping codesign"; exit 0; fi
+          echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
+          security create-keychain -p "" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "" build.keychain
+          security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" build.keychain
+          if [ -d "dist/Fartrun.app" ]; then
+            codesign --force --deep --options runtime --sign "Developer ID Application" dist/Fartrun.app
+          else
+            codesign --force --options runtime --sign "Developer ID Application" dist/fartrun
+          fi
+
+      - name: Notarize
+        continue-on-error: true
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -z "$APPLE_ID" ]; then echo "No Apple ID — skipping notarize"; exit 0; fi
+          cd dist
+          zip -r ../notarize.zip Fartrun.app 2>/dev/null || zip -r ../notarize.zip fartrun
+          cd ..
+          xcrun notarytool submit notarize.zip --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+          if [ -d "dist/Fartrun.app" ]; then
+            xcrun stapler staple dist/Fartrun.app
+          fi
+          rm notarize.zip
+
+      - name: Package
+        run: |
+          cd dist
+          zip -r ../fartrun-macos-arm64.zip Fartrun.app 2>/dev/null || zip -r ../fartrun-macos-arm64.zip fartrun
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fartrun-macos-arm64
+          path: fartrun-macos-arm64.zip
+
+  # ─── Release: all platforms + SHA256SUMS ───
   release:
-    needs: [build-linux, build-windows]
+    needs: [build-linux, build-windows, build-macos-x64, build-macos-arm64]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     steps:
       - uses: actions/download-artifact@v4
         with: { path: artifacts }
+
+      - name: Collect release files
+        run: |
+          mkdir -p release
+          cp artifacts/fartrun-linux-x64/fartrun-linux-x64.tar.gz release/
+          cp artifacts/fartrun-windows-x64/fartrun-windows-x64.zip release/
+          cp artifacts/fartrun-macos-x64/fartrun-macos-x64.zip release/
+          cp artifacts/fartrun-macos-arm64/fartrun-macos-arm64.zip release/
+
+      - name: Generate SHA256SUMS
+        run: |
+          cd release
+          sha256sum * > SHA256SUMS.txt
+          echo "--- SHA256SUMS.txt ---"
+          cat SHA256SUMS.txt
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -148,42 +231,35 @@ jobs:
             Not another AI checking AI. Zero tokens consumed.
 
             ### Downloads
-            - **Linux**: `fartrun-linux-x64.tar.gz`
-            - **Windows**: `fartrun-windows-x64.zip`
-            - **macOS**: `fartrun-macos-x64.zip` _(added when Apple signing completes)_
+            | Platform | File | Architecture |
+            |----------|------|--------------|
+            | Linux | `fartrun-linux-x64.tar.gz` | x86_64 |
+            | macOS | `fartrun-macos-x64.zip` | Intel x64 |
+            | macOS | `fartrun-macos-arm64.zip` | Apple Silicon (M1/M2/M3/M4) |
+            | Windows | `fartrun-windows-x64.zip` | x86_64 |
+
+            ### Verify download
+            ```bash
+            sha256sum -c SHA256SUMS.txt
+            ```
 
             ### Install via npx
             ```
             npx fartrun@latest install
             ```
 
-            ### What's included
-            - MCP server (29 tools, stdio + HTTP)
-            - CLI (`fartrun scan`, `fartrun save`, `fartrun rollback`)
-            - Desktop GUI (Win95 aesthetic)
-            - Rust security & health modules (compiled)
-            - 2 fart sounds + 3 Hasselhoff songs
+            ### Build from source
+            ```bash
+            git clone https://github.com/ChuprinaDaria/Vibecode-Cleaner-Fartrun.git
+            cd Vibecode-Cleaner-Fartrun
+            pip install -e ".[http]"
+            cd crates/health && maturin develop --release && cd ../..
+            cd crates/sentinel && maturin develop --release && cd ../..
+            ```
           files: |
-            artifacts/**/*.tar.gz
-            artifacts/**/*.zip
+            release/*
           draft: false
           prerelease: false
-
-  # ─── macOS attaches to release when ready ───
-  release-macos:
-    needs: [build-macos, release]
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: fartrun-macos-x64
-          path: artifacts
-
-      - name: Attach macOS to release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: artifacts/fartrun-macos-x64.zip
 
   # ─── npm publish ───
   publish-npm:
