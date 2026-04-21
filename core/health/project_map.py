@@ -380,4 +380,11 @@ def run_all_checks(project_dir: str) -> HealthReport:
     except Exception as e:
         log.error("context7 recommendations error: %s", e)
 
+    # Always save .md report
+    try:
+        from core.health.report_md import save_report_md
+        save_report_md(report)
+    except Exception as e:
+        log.warning("Could not save .md report: %s", e)
+
     return report
