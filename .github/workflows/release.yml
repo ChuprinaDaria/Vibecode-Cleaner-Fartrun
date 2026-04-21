@@ -69,23 +69,33 @@ jobs:
   # ─── macOS x64 (Intel via Rosetta on ARM runner) ───
   build-macos-x64:
     runs-on: macos-latest
+    defaults:
+      run:
+        shell: arch -x86_64 /bin/bash --noprofile --norc -eo pipefail {0}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "${{ env.PYTHON_VERSION }}"
-          architecture: x64
+
+      - name: Install x86_64 Python via Rosetta
+        run: |
+          arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" </dev/null
+          eval "$(/usr/local/bin/brew shellenv)"
+          brew install python@3.11
+          /usr/local/opt/python@3.11/bin/python3.11 --version
+          file /usr/local/opt/python@3.11/bin/python3.11
+
       - uses: dtolnay/rust-toolchain@stable
         with: { targets: x86_64-apple-darwin }
 
       - name: Build
         run: |
-          python -m venv .venv && source .venv/bin/activate
+          eval "$(/usr/local/bin/brew shellenv)"
+          /usr/local/opt/python@3.11/bin/python3.11 -m venv .venv
+          source .venv/bin/activate
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install maturin pyinstaller ".[http]"
           cd crates/health && maturin develop --release --target x86_64-apple-darwin && cd ../..
           cd crates/sentinel && maturin develop --release --target x86_64-apple-darwin && cd ../..
-          arch -x86_64 .venv/bin/pyinstaller fartrun.spec --noconfirm
+          pyinstaller fartrun.spec --noconfirm
 
       - name: Codesign
         continue-on-error: true
