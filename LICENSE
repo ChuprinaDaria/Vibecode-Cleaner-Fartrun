@@ -1,24 +1,35 @@
-FART & RUN LICENSE v1.0
+MIT License
 
 Copyright (c) 2026 Daria Chuprina
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software, to use, copy, modify, merge, publish, distribute, and/or
-sublicense it, subject to the following conditions:
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+FART & RUN LICENSE v1.0 (supplementary, for vibes)
 
 1. You may fart and run, but you must attribute the original farter.
 2. You may not use this software to mass-fart on production servers you
    don't own. That's not a vulnerability scan, that's just rude.
-3. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
-   If it fails to detect a vulnerability, that's on you for trusting
-   a scanner named after flatulence.
-4. Hasselhoff appearances are provided on an AS-AVAILABLE basis and
+3. Hasselhoff appearances are provided on an AS-AVAILABLE basis and
    are not guaranteed in all runtime environments.
-5. Nag messages are a feature. Disabling them voids your warranty
+4. Nag messages are a feature. Disabling them voids your warranty
    (you never had one).
-6. The "Silent But Deadly" sound mode is exactly what it sounds like.
+5. The "Silent But Deadly" sound mode is exactly what it sounds like.
    And doesn't sound like.
-
-THE AUTHORS SHALL NOT BE LIABLE FOR ANY EMBARRASSMENT, TERMINATED
-EMPLOYMENT, OR SOCIAL CONSEQUENCES ARISING FROM FART SOUNDS PLAYING
-DURING VIDEO CALLS, OPEN OFFICES, OR CLIENT DEMONSTRATIONS.

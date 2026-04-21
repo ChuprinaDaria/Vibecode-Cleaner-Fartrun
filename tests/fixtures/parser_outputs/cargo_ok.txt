@@ -1,0 +1,12 @@
+   Compiling health v0.1.0
+    Finished test [unoptimized + debuginfo] target(s) in 1.23s
+     Running unittests src/lib.rs
+
+running 5 tests
+test foo::test_a ... ok
+test foo::test_b ... ok
+test foo::test_c ... ok
+test bar::test_d ... ok
+test bar::test_e ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s

@@ -1,0 +1,204 @@
+name: Build & Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  # ─── Linux ───
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "${{ env.PYTHON_VERSION }}" }
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: x86_64-unknown-linux-gnu }
+
+      - name: Build
+        run: |
+          python -m venv .venv && source .venv/bin/activate
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install maturin pyinstaller ".[http]"
+          cd crates/health && maturin develop --release && cd ../..
+          cd crates/sentinel && maturin develop --release && cd ../..
+          pyinstaller fartrun.spec --noconfirm
+          cd dist && tar czf ../fartrun-linux-x64.tar.gz fartrun
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fartrun-linux-x64
+          path: fartrun-linux-x64.tar.gz
+
+  # ─── Windows ───
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "${{ env.PYTHON_VERSION }}" }
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: x86_64-pc-windows-msvc }
+
+      - name: Build
+        shell: bash
+        run: |
+          python -m venv .venv && source .venv/Scripts/activate
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install maturin pyinstaller ".[http]"
+          cd crates/health && maturin develop --release && cd ../..
+          cd crates/sentinel && maturin develop --release && cd ../..
+          pyinstaller fartrun.spec --noconfirm
+
+      - name: Package
+        shell: pwsh
+        run: Compress-Archive -Path dist\fartrun.exe -DestinationPath fartrun-windows-x64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fartrun-windows-x64
+          path: fartrun-windows-x64.zip
+
+  # ─── macOS (sign + notarize) ───
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "${{ env.PYTHON_VERSION }}" }
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: x86_64-apple-darwin }
+
+      - name: Build
+        run: |
+          python -m venv .venv && source .venv/bin/activate
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install maturin pyinstaller ".[http]"
+          cd crates/health && maturin develop --release && cd ../..
+          cd crates/sentinel && maturin develop --release && cd ../..
+          pyinstaller fartrun.spec --noconfirm
+
+      - name: Codesign
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
+          security create-keychain -p "" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "" build.keychain
+          security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" build.keychain
+          if [ -d "dist/Fartrun.app" ]; then
+            codesign --force --deep --options runtime --sign "Developer ID Application" dist/Fartrun.app
+          else
+            codesign --force --options runtime --sign "Developer ID Application" dist/fartrun
+          fi
+
+      - name: Notarize
+        continue-on-error: true
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          cd dist
+          zip -r ../notarize.zip Fartrun.app 2>/dev/null || zip -r ../notarize.zip fartrun
+          cd ..
+          xcrun notarytool submit notarize.zip --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+          if [ -d "dist/Fartrun.app" ]; then
+            xcrun stapler staple dist/Fartrun.app
+          fi
+          rm notarize.zip
+
+      - name: Package
+        run: |
+          cd dist
+          zip -r ../fartrun-macos-x64.zip Fartrun.app 2>/dev/null || zip -r ../fartrun-macos-x64.zip fartrun
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fartrun-macos-x64
+          path: fartrun-macos-x64.zip
+
+  # ─── Release (Linux + Windows, doesn't wait for macOS) ───
+  release:
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: artifacts }
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Vibecode Cleaner Fartrun ${{ github.ref_name }}"
+          body: |
+            ## Vibecode Cleaner Fartrun ${{ github.ref_name }}
+
+            Rust-powered code scanner for vibe-coded projects.
+            Not another AI checking AI. Zero tokens consumed.
+
+            ### Downloads
+            - **Linux**: `fartrun-linux-x64.tar.gz`
+            - **Windows**: `fartrun-windows-x64.zip`
+            - **macOS**: `fartrun-macos-x64.zip` _(added when Apple signing completes)_
+
+            ### Install via npx
+            ```
+            npx fartrun@latest install
+            ```
+
+            ### What's included
+            - MCP server (29 tools, stdio + HTTP)
+            - CLI (`fartrun scan`, `fartrun save`, `fartrun rollback`)
+            - Desktop GUI (Win95 aesthetic)
+            - Rust security & health modules (compiled)
+            - 2 fart sounds + 3 Hasselhoff songs
+          files: |
+            artifacts/**/*.tar.gz
+            artifacts/**/*.zip
+          draft: false
+          prerelease: false
+
+  # ─── macOS attaches to release when ready ───
+  release-macos:
+    needs: [build-macos, release]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: fartrun-macos-x64
+          path: artifacts
+
+      - name: Attach macOS to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/fartrun-macos-x64.zip
+
+  # ─── npm publish ───
+  publish-npm:
+    needs: release
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Publish to npm
+        working-directory: npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public

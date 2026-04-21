@@ -1,0 +1,131 @@
+{
+  "tools": {
+    "git": {
+      "name": "Git",
+      "icon": "[GIT]",
+      "description_en": "Version control — even Hasselhoff tracks his beach saves",
+      "description_ua": "Контроль версій — навіть Хасселхофф трекає свої пляжні рятунки",
+      "check_command": "git --version",
+      "install": {
+        "linux_apt": "git",
+        "linux_dnf": "git",
+        "linux_pacman": "git"
+      },
+      "download": {
+        "windows": "https://github.com/git-for-windows/git/releases/latest",
+        "mac": "https://git-scm.com/download/mac"
+      },
+      "post_install": {
+        "type": "git_config",
+        "fields": ["user.name", "user.email"]
+      },
+      "hoff_phrases_en": [
+        "Knight Rider needs version control too!",
+        "Hasselhoff once lost code without Git. ONCE.",
+        "Don't Hassel the Git! Commit like your life depends on it!",
+        "Even KITT has a .gitignore"
+      ],
+      "hoff_phrases_ua": [
+        "Knight Rider теж потребує контроль версій!",
+        "Хасселхофф одного разу втратив код без Git. ОДНОГО РАЗУ.",
+        "Don't Hassel the Git! Комміть ніби життя залежить від цього!",
+        "Навіть КІТТ має .gitignore"
+      ]
+    },
+    "cursor": {
+      "name": "Cursor",
+      "icon": "[CUR]",
+      "description_en": "AI-powered IDE — Hasselhoff's weapon of mass coding",
+      "description_ua": "AI-powered IDE — зброя масового кодингу Хасселхоффа",
+      "check_command": "cursor --version",
+      "check_paths": [
+        "/usr/bin/cursor",
+        "/usr/local/bin/cursor",
+        "/snap/bin/cursor",
+        "/opt/cursor/cursor"
+      ],
+      "install": {
+        "linux": "snap install cursor"
+      },
+      "download": {
+        "windows": "https://www.cursor.com/downloads",
+        "mac": "https://www.cursor.com/downloads",
+        "linux_appimage": "https://www.cursor.com/downloads"
+      },
+      "hoff_phrases_en": [
+        "Cursor — because Hasselhoff doesn't type, he COMMANDS!",
+        "AI coding? That's just Hasselhoff with a keyboard!",
+        "KITT, launch Cursor! We're going vibecoding!",
+        "Baywatch but for code — Cursor saves your drowning functions!"
+      ],
+      "hoff_phrases_ua": [
+        "Cursor — бо Хасселхофф не друкує, він КОМАНДУЄ!",
+        "AI кодинг? Це просто Хасселхофф з клавіатурою!",
+        "КІТТ, запусти Cursor! Ми йдемо вайбкодити!",
+        "Baywatch але для коду — Cursor рятує твої потопаючі функції!"
+      ]
+    },
+    "vscode": {
+      "name": "VS Code",
+      "icon": "[VSC]",
+      "description_en": "Classic IDE — the boardshorts of code editors",
+      "description_ua": "Класичний IDE — пляжні шорти серед редакторів коду",
+      "check_command": "code --version",
+      "install": {
+        "linux_snap": "snap install code --classic",
+        "linux_apt_repo": "https://code.visualstudio.com/docs/setup/linux"
+      },
+      "download": {
+        "windows": "https://code.visualstudio.com/download",
+        "mac": "https://code.visualstudio.com/download"
+      },
+      "hoff_phrases_en": [
+        "VS Code — Old Reliable, like Hasselhoff's red shorts!",
+        "Extensions are like Baywatch lifeguards — you need ALL of them!",
+        "Hasselhoff uses VS Code. The Hoff Diff Extension. Trust me.",
+        "Looking for Freedom... and syntax highlighting!"
+      ],
+      "hoff_phrases_ua": [
+        "VS Code — надійний як червоні шорти Хасселхоффа!",
+        "Розширення як рятувальники Baywatch — тобі потрібні ВСІ!",
+        "Хасселхофф юзає VS Code. Hoff Diff Extension. Вір мені.",
+        "Looking for Freedom... і підсвітку синтаксису!"
+      ]
+    },
+    "claude_code": {
+      "name": "Claude Code",
+      "icon": "[CLI]",
+      "description_en": "AI pair programmer — Hasselhoff's digital stunt double",
+      "description_ua": "AI парний програміст — цифровий дублер Хасселхоффа",
+      "check_command": "claude --version",
+      "requires": "node",
+      "requires_check": "node --version",
+      "requires_install_hint_en": "Install Node.js first: https://nodejs.org/",
+      "requires_install_hint_ua": "Спочатку встанови Node.js: https://nodejs.org/",
+      "install": {
+        "all": "npm install -g @anthropic-ai/claude-code"
+      },
+      "download": {
+        "info": "https://docs.anthropic.com/en/docs/claude-code"
+      },
+      "hoff_phrases_en": [
+        "Claude Code — it's like having Hasselhoff write your code. IN THE FUTURE.",
+        "KITT had an AI. You have Claude. Same energy, less car chases.",
+        "npm install -g @anthropic-ai/claude-code — the most Hasselhoff command ever!",
+        "Vibecoding level: Hasselhoff singing to the Berlin Wall!"
+      ],
+      "hoff_phrases_ua": [
+        "Claude Code — це як мати Хасселхоффа що пише твій код. У МАЙБУТНЬОМУ.",
+        "КІТТ мав ШІ. Ти маєш Claude. Та ж енергія, менше автоперегонів.",
+        "npm install -g @anthropic-ai/claude-code — найхасселхоффніша команда!",
+        "Рівень вайбкодингу: Хасселхофф співає Берлінській стіні!"
+      ]
+    }
+  },
+  "meta": {
+    "version": "1.0",
+    "updated": "2026-04-14",
+    "hoff_wisdom_en": "Remember: Don't Hassel the Hoff, and always commit before you push!",
+    "hoff_wisdom_ua": "Пам'ятай: Don't Hassel the Hoff, і завжди коміть перед пушем!"
+  }
+}

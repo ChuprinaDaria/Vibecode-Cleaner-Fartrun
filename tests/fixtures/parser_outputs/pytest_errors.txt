@@ -1,0 +1,8 @@
+============================= test session starts ==============================
+collected 2 items / 1 error
+
+==================================== ERRORS ====================================
+___________________ ERROR collecting tests/test_broken.py ______________________
+ImportError: cannot import name 'foo'
+
+=========================== 1 passed, 1 error in 0.04s =========================

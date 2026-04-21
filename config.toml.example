@@ -1,0 +1,65 @@
+
+[general]
+refresh_interval = 5
+language = "en"
+
+[sounds]
+enabled = true
+mode = "classic"
+quiet_hours_start = "23:00"
+quiet_hours_end = "07:00"
+
+[alerts]
+cooldown_seconds = 295
+desktop_notifications = true
+popup_notifications = true
+
+[plugins]
+test_runner = true
+
+[plugins.docker_monitor]
+enabled = true
+cpu_threshold = 80
+ram_threshold = 85
+alert_on_exit = true
+
+[plugins.port_map]
+enabled = true
+
+[plugins.security_scan]
+enabled = true
+scan_interval = 3600
+scan_paths = ["~"]
+
+[snapshots]
+enabled = true
+auto_interval_minutes = 30
+max_snapshots = 50
+
+[haiku]
+api_key = ""
+
+[safety_net]
+max_save_points = 20
+auto_gitignore = true
+show_hints = true
+
+[status]
+check_interval_minutes = 5
+enabled = true
+
+[alert_filters]
+docker = true
+security = true
+ports = true
+usage = true
+
+[tests]
+command = ""
+timeout_s = 600
+trigger_on_save_point = false
+watch = false
+watch_paths = ["."]
+watch_exclude = [".git", "node_modules", "target", "__pycache__", ".venv", "dist"]
+debounce_ms = 2000
+history_limit = 100

@@ -1,0 +1,29 @@
+[package]
+name = "health"
+version = "0.1.0"
+edition = "2021"
+description = "fart.run health — project health scanner for vibe coders"
+
+[lib]
+name = "health"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.25", features = ["extension-module"] }
+tree-sitter = "0.26"
+tree-sitter-python = "0.25"
+tree-sitter-javascript = "0.25"
+tree-sitter-typescript = "0.23"
+rayon = "1.10"
+ignore = "0.4"
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+walkdir = "2"
+oxc_parser = "=0.126.0"
+oxc_ast = "=0.126.0"
+oxc_span = "=0.126.0"
+oxc_allocator = "=0.126.0"
+
+[dev-dependencies]
+tempfile = "3"

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Fart Run & Awesome Hasselhoff
+Comment=Dev environment monitor with fart-powered alerts
+Exec=python3 -m gui.app
+Icon=utilities-system-monitor
+Terminal=false
+Type=Application
+Categories=Development;System;Monitor;
+StartupNotify=true

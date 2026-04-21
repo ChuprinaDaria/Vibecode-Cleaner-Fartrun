@@ -7,7 +7,7 @@ const os = require("os");
 const https = require("https");
 
 const REPO = "ChuprinaDaria/Vibecode-Cleaner-Fartrun";
-const VERSION = "3.0.0";
+const VERSION = require(path.join(__dirname, "..", "package.json")).version;
 
 const PINK = "\x1b[35m";
 const GREEN = "\x1b[32m";

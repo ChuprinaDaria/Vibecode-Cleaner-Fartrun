@@ -1,0 +1,18 @@
+[package]
+name = "sentinel"
+version = "0.1.0"
+edition = "2021"
+description = "fart.run sentinel — cross-platform host IDS for vibe coders"
+
+[lib]
+name = "sentinel"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.25", features = ["extension-module"] }
+sysinfo = "0.36"
+regex = "1"
+rayon = "1.10"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
