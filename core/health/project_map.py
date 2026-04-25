@@ -135,6 +135,12 @@ def run_all_checks(project_dir: str, *, use_cache: bool = True) -> HealthReport:
             message="Build the health crate: cd crates/health && maturin develop",
         ))
 
+    # ScanContext shares parsed tree-sitter trees across scanners so a
+    # Python file walked by both module_map and dead_code is parsed once,
+    # not twice. Created lazily so we don't pay the construction cost in
+    # the cache-hit fast-path or pure-Python branch above.
+    scan_ctx = health_rs.ScanContext() if _rust_available else None
+
     if _rust_available:
         # Check 1.1 — File Tree
         try:
@@ -181,7 +187,9 @@ def run_all_checks(project_dir: str, *, use_cache: bool = True) -> HealthReport:
         # Check 1.3 — Module Map
         try:
             entry_paths = [ep["path"] for ep in report.entry_points]
-            mm_result = health_rs.scan_module_map(project_dir, entry_paths)
+            mm_result = health_rs.scan_module_map_with_context(
+                scan_ctx, project_dir, entry_paths,
+            )
             report.module_map = {
                 "hub_modules": list(mm_result.hub_modules),
                 "circular_deps": list(mm_result.circular_deps),
@@ -247,7 +255,10 @@ def run_all_checks(project_dir: str, *, use_cache: bool = True) -> HealthReport:
         try:
             from core.health.dead_code import run_dead_code_checks
             entry_paths = [ep["path"] for ep in report.entry_points]
-            run_dead_code_checks(report, health_rs, project_dir, entry_paths)
+            run_dead_code_checks(
+                report, health_rs, project_dir, entry_paths,
+                scan_ctx=scan_ctx,
+            )
         except BaseException as e:
             log.error("dead_code scan error: %s", e)
 

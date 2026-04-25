@@ -11,6 +11,7 @@ use std::path::Path;
 use pyo3::prelude::*;
 
 use crate::common::{collect_source_files, WalkOpts};
+use crate::scan_ctx::{CtxLang, ScanContext};
 
 #[pyclass]
 #[derive(Clone)]
@@ -407,18 +408,16 @@ fn is_route_path(rel_path: &str) -> bool {
     })
 }
 
-fn parse_file(content: &str, rel_path: &str, lang: Lang) -> FileData {
+fn parse_file(
+    content: &str,
+    rel_path: &str,
+    lang: Lang,
+    ctx: Option<&ScanContext>,
+) -> FileData {
     let is_init = rel_path.ends_with("__init__.py");
     let is_route_file = is_route_path(rel_path)
         && matches!(lang, Lang::JavaScript | Lang::TypeScript | Lang::Tsx);
 
-    let mut parser = tree_sitter::Parser::new();
-    let ts_lang = match lang {
-        Lang::Python => tree_sitter_python::LANGUAGE.into(),
-        Lang::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
-        Lang::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
-        Lang::Tsx => tree_sitter_typescript::LANGUAGE_TSX.into(),
-    };
     let empty = FileData {
         rel_path: rel_path.to_string(),
         lang,
@@ -430,12 +429,34 @@ fn parse_file(content: &str, rel_path: &str, lang: Lang) -> FileData {
         is_init,
         is_route_file,
     };
-    if parser.set_language(&ts_lang).is_err() {
-        return empty;
-    }
-    let tree = match parser.parse(content, None) {
-        Some(t) => t,
-        None => return empty,
+
+    // Resolve a tree-sitter Tree either from the cross-scanner cache or
+    // by parsing right here. The cache path lets module_map's earlier
+    // pass amortise this parse for the dead_code scan over the same file.
+    let ctx_lang = match lang {
+        Lang::Python => CtxLang::Python,
+        Lang::JavaScript => CtxLang::JavaScript,
+        Lang::TypeScript => CtxLang::TypeScript,
+        Lang::Tsx => CtxLang::Tsx,
+    };
+    let cached_tree = if let Some(ctx) = ctx {
+        ctx.parse(rel_path, ctx_lang, content)
+    } else {
+        None
+    };
+    let owned_tree;
+    let tree: &tree_sitter::Tree = if let Some(arc) = cached_tree.as_ref() {
+        arc.as_ref()
+    } else {
+        let mut parser = tree_sitter::Parser::new();
+        if parser.set_language(&ctx_lang.ts_language()).is_err() {
+            return empty;
+        }
+        owned_tree = match parser.parse(content, None) {
+            Some(t) => t,
+            None => return empty,
+        };
+        &owned_tree
     };
 
     let mut imports: Vec<(String, u32, String)> = Vec::new();
@@ -1077,7 +1098,24 @@ fn maybe_emit_block(
 }
 
 #[pyfunction]
-pub fn scan_dead_code(path: &str, _entry_point_paths: Vec<String>) -> PyResult<DeadCodeResult> {
+pub fn scan_dead_code(path: &str, entry_point_paths: Vec<String>) -> PyResult<DeadCodeResult> {
+    scan_dead_code_inner(path, entry_point_paths, None)
+}
+
+#[pyfunction]
+pub fn scan_dead_code_with_context(
+    ctx: &ScanContext,
+    path: &str,
+    entry_point_paths: Vec<String>,
+) -> PyResult<DeadCodeResult> {
+    scan_dead_code_inner(path, entry_point_paths, Some(ctx))
+}
+
+fn scan_dead_code_inner(
+    path: &str,
+    _entry_point_paths: Vec<String>,
+    ctx: Option<&ScanContext>,
+) -> PyResult<DeadCodeResult> {
     let root = Path::new(path);
     if !root.is_dir() {
         return Err(pyo3::exceptions::PyValueError::new_err(
@@ -1099,11 +1137,15 @@ pub fn scan_dead_code(path: &str, _entry_point_paths: Vec<String>) -> PyResult<D
             // false dead-code results.
             _ => continue,
         };
-        let content = match fs::read_to_string(&src.abs_path) {
-            Ok(c) => c,
-            Err(_) => continue,
+        let content_holder = if let Some(ctx) = ctx {
+            ctx.read_file(&src.rel_path, &src.abs_path)
+        } else {
+            fs::read_to_string(&src.abs_path).ok().map(std::sync::Arc::new)
         };
-        file_data.push(parse_file(&content, &src.rel_path, lang));
+        let Some(content_arc) = content_holder else {
+            continue;
+        };
+        file_data.push(parse_file(content_arc.as_str(), &src.rel_path, lang, ctx));
     }
 
     // Phase 2: Unused imports (per-file)

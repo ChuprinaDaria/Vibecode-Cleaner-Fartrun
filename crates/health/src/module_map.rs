@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use pyo3::prelude::*;
 
 use crate::common::{collect_source_files, is_generated_or_data_file, WalkOpts};
+use crate::scan_ctx::{CtxLang, ScanContext};
 
 #[pyclass]
 #[derive(Clone)]
@@ -56,8 +57,34 @@ struct ImportEntry {
     is_top_level: bool,
 }
 
-/// Extract import sources from Python file using tree-sitter.
-fn extract_python_imports(content: &str) -> Vec<ImportEntry> {
+/// Walk a parsed tree-sitter `Tree` and collect imports, given the
+/// language family. Pulled out so cached and uncached paths share one
+/// implementation — the only difference is who allocates the `Tree`.
+fn collect_imports_from_tree(
+    tree: &tree_sitter::Tree,
+    content: &str,
+    family: &str,
+) -> Vec<ImportEntry> {
+    let mut imports = Vec::new();
+    let mut cursor = tree.walk();
+    collect_imports_recursive(&mut cursor, content, &mut imports, family, 0);
+    imports
+}
+
+/// Extract import sources from a Python file. When `ctx` is provided the
+/// parsed `Tree` is taken from / inserted into the cross-scanner cache so
+/// other context-aware scanners (e.g. dead_code) can reuse it for free.
+fn extract_python_imports(
+    content: &str,
+    rel_path: &str,
+    ctx: Option<&ScanContext>,
+) -> Vec<ImportEntry> {
+    if let Some(ctx) = ctx {
+        let Some(tree) = ctx.parse(rel_path, CtxLang::Python, content) else {
+            return vec![];
+        };
+        return collect_imports_from_tree(&tree, content, "python");
+    }
     let mut parser = tree_sitter::Parser::new();
     if parser
         .set_language(&tree_sitter_python::LANGUAGE.into())
@@ -65,20 +92,29 @@ fn extract_python_imports(content: &str) -> Vec<ImportEntry> {
     {
         return vec![];
     }
-
-    let tree = match parser.parse(content, None) {
-        Some(t) => t,
-        None => return vec![],
+    let Some(tree) = parser.parse(content, None) else {
+        return vec![];
     };
-
-    let mut imports = Vec::new();
-    let mut cursor = tree.walk();
-    collect_imports_recursive(&mut cursor, content, &mut imports, "python", 0);
-    imports
+    collect_imports_from_tree(&tree, content, "python")
 }
 
-/// Extract import sources from JS/TS file using tree-sitter.
-fn extract_js_imports(content: &str, ext: &str) -> Vec<ImportEntry> {
+/// Extract import sources from a JS/TS file. See `extract_python_imports`
+/// for the `ctx` semantics.
+fn extract_js_imports(
+    content: &str,
+    rel_path: &str,
+    ext: &str,
+    ctx: Option<&ScanContext>,
+) -> Vec<ImportEntry> {
+    if let Some(ctx) = ctx {
+        let Some(lang) = CtxLang::from_ext(ext) else {
+            return vec![];
+        };
+        let Some(tree) = ctx.parse(rel_path, lang, content) else {
+            return vec![];
+        };
+        return collect_imports_from_tree(&tree, content, "js");
+    }
     let mut parser = tree_sitter::Parser::new();
     let lang = match ext {
         "ts" | "mts" | "cts" => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
@@ -88,16 +124,10 @@ fn extract_js_imports(content: &str, ext: &str) -> Vec<ImportEntry> {
     if parser.set_language(&lang).is_err() {
         return vec![];
     }
-
-    let tree = match parser.parse(content, None) {
-        Some(t) => t,
-        None => return vec![],
+    let Some(tree) = parser.parse(content, None) else {
+        return vec![];
     };
-
-    let mut imports = Vec::new();
-    let mut cursor = tree.walk();
-    collect_imports_recursive(&mut cursor, content, &mut imports, "js", 0);
-    imports
+    collect_imports_from_tree(&tree, content, "js")
 }
 
 fn collect_imports_recursive(
@@ -526,6 +556,23 @@ fn try_rel(p: &Path, root: &Path) -> Option<String> {
 
 #[pyfunction]
 pub fn scan_module_map(path: &str, entry_point_paths: Vec<String>) -> PyResult<ModuleMapResult> {
+    scan_module_map_inner(path, entry_point_paths, None)
+}
+
+#[pyfunction]
+pub fn scan_module_map_with_context(
+    ctx: &ScanContext,
+    path: &str,
+    entry_point_paths: Vec<String>,
+) -> PyResult<ModuleMapResult> {
+    scan_module_map_inner(path, entry_point_paths, Some(ctx))
+}
+
+fn scan_module_map_inner(
+    path: &str,
+    entry_point_paths: Vec<String>,
+    ctx: Option<&ScanContext>,
+) -> PyResult<ModuleMapResult> {
     let root = Path::new(path);
     if !root.is_dir() {
         return Err(pyo3::exceptions::PyValueError::new_err(
@@ -595,10 +642,17 @@ pub fn scan_module_map(path: &str, entry_point_paths: Vec<String>) -> PyResult<M
             .and_then(|e| e.to_str())
             .unwrap_or("");
 
-        let content = match fs::read_to_string(abs_path) {
-            Ok(c) => c,
-            Err(_) => continue,
+        // Prefer the cross-scanner cache when one was provided so other
+        // context-aware scanners can reuse the same allocation.
+        let content_holder = if let Some(ctx) = ctx {
+            ctx.read_file(rel_path, abs_path)
+        } else {
+            fs::read_to_string(abs_path).ok().map(std::sync::Arc::new)
         };
+        let Some(content_arc) = content_holder else {
+            continue;
+        };
+        let content: &str = content_arc.as_str();
 
         let lang = match ext {
             "py" => "python",
@@ -607,9 +661,9 @@ pub fn scan_module_map(path: &str, entry_point_paths: Vec<String>) -> PyResult<M
             _ => continue,
         };
         let raw_imports = if ext == "py" {
-            extract_python_imports(&content)
+            extract_python_imports(content, rel_path, ctx)
         } else {
-            extract_js_imports(&content, ext)
+            extract_js_imports(content, rel_path, ext, ctx)
         };
 
         let mut resolved = Vec::new();

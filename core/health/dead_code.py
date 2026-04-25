@@ -15,10 +15,22 @@ def run_dead_code_checks(
     health_rs,
     project_dir: str,
     entry_point_paths: list[str],
+    *,
+    scan_ctx=None,
 ) -> None:
-    """Run dead code checks and append findings to report."""
+    """Run dead code checks and append findings to report.
+
+    When `scan_ctx` is provided, the cached file contents and parsed trees
+    are reused — typically populated by an earlier `scan_module_map_with_context`
+    call in the same run.
+    """
     try:
-        result = health_rs.scan_dead_code(project_dir, entry_point_paths)
+        if scan_ctx is not None:
+            result = health_rs.scan_dead_code_with_context(
+                scan_ctx, project_dir, entry_point_paths,
+            )
+        else:
+            result = health_rs.scan_dead_code(project_dir, entry_point_paths)
     except BaseException as e:
         log.error("dead_code scan error: %s", e)
         return

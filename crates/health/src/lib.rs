@@ -9,6 +9,7 @@ mod module_map;
 mod monsters;
 mod overengineering;
 mod reusable;
+mod scan_ctx;
 mod tech_debt;
 mod ux_sanity;
 
@@ -16,6 +17,8 @@ use pyo3::prelude::*;
 
 #[pymodule]
 fn health(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<scan_ctx::ScanContext>()?;
+
     m.add_class::<file_tree::FileTreeResult>()?;
     m.add_function(wrap_pyfunction!(file_tree::scan_file_tree, m)?)?;
 
@@ -32,12 +35,14 @@ fn health(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<module_map::CircularDep>()?;
     m.add_class::<module_map::ModuleMapResult>()?;
     m.add_function(wrap_pyfunction!(module_map::scan_module_map, m)?)?;
+    m.add_function(wrap_pyfunction!(module_map::scan_module_map_with_context, m)?)?;
 
     m.add_class::<dead_code::UnusedImport>()?;
     m.add_class::<dead_code::UnusedDefinition>()?;
     m.add_class::<dead_code::CommentedBlock>()?;
     m.add_class::<dead_code::DeadCodeResult>()?;
     m.add_function(wrap_pyfunction!(dead_code::scan_dead_code, m)?)?;
+    m.add_function(wrap_pyfunction!(dead_code::scan_dead_code_with_context, m)?)?;
 
     m.add_class::<tech_debt::MissingType>()?;
     m.add_class::<tech_debt::ErrorGap>()?;
