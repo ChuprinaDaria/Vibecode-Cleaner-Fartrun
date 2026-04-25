@@ -192,3 +192,52 @@ def clear(project_dir: str | None = None) -> int:
     except sqlite3.Error as e:
         log.warning("scan_cache.clear: sqlite error: %s", e)
         return 0
+
+
+def list_cached_hashes(project_dir: str) -> set[str]:
+    """Return every git HEAD hash that currently has a cached scan for this
+    project under the active schema version. Used by git_delta to find the
+    most recent ancestor commit that we can incrementally update from."""
+    key = _project_key(project_dir)
+    try:
+        conn = _connect()
+        try:
+            rows = conn.execute(
+                "SELECT head_hash FROM scan_cache "
+                "WHERE project_key=? AND schema_version=?",
+                (key, CACHE_SCHEMA_VERSION),
+            ).fetchall()
+        finally:
+            conn.close()
+    except sqlite3.Error as e:
+        log.warning("scan_cache.list_cached_hashes: sqlite error: %s", e)
+        return set()
+    return {row[0] for row in rows}
+
+
+def get_at(project_dir: str, head_hash_value: str) -> HealthReport | None:
+    """Look up a cached report for a *specific* commit hash, regardless of
+    whether the working tree currently sits at that hash. This is what
+    git_delta uses to retrieve the report from an ancestor commit so it can
+    patch it with diff-derived findings."""
+    key = _project_key(project_dir)
+    try:
+        conn = _connect()
+        try:
+            row = conn.execute(
+                "SELECT payload FROM scan_cache "
+                "WHERE project_key=? AND head_hash=? AND schema_version=?",
+                (key, head_hash_value, CACHE_SCHEMA_VERSION),
+            ).fetchone()
+        finally:
+            conn.close()
+    except sqlite3.Error as e:
+        log.warning("scan_cache.get_at: sqlite error: %s", e)
+        return None
+    if not row:
+        return None
+    try:
+        return _deserialize(row[0])
+    except (json.JSONDecodeError, TypeError, KeyError) as e:
+        log.warning("scan_cache.get_at: deserialize failed: %s", e)
+        return None
