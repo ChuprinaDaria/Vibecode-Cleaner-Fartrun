@@ -141,6 +141,51 @@ def _run_module_map(
     return result
 
 
+def _run_duplicates(health_rs, project_dir: str, *, delta_context):
+    """Duplicates dispatch: incremental when ancestor state is cached,
+    full scan otherwise. Always persists state under the current HEAD
+    so the next delta-eligible run can be incremental.
+    """
+    from core.health import cache as cache_mod
+    from core.health.duplicates import incremental_duplicates_scan
+
+    new_state: dict[str, str] | None = None
+    result = None
+
+    if delta_context is not None:
+        plan, _ancestor = delta_context
+        prior_state = cache_mod.get_file_data(
+            project_dir, plan.ancestor_hash, "duplicates",
+        )
+        if prior_state:
+            try:
+                result, new_state = incremental_duplicates_scan(
+                    health_rs, project_dir, prior_state,
+                    changed_paths=set(plan.added_or_modified),
+                    deleted_paths=set(plan.deleted),
+                )
+                log.info(
+                    "duplicates: incremental run, %d carried over, %d re-parsed",
+                    len(prior_state) - len(plan.added_or_modified) - len(plan.deleted),
+                    len(plan.added_or_modified),
+                )
+            except BaseException as e:
+                log.error("incremental duplicates failed, falling back: %s", e)
+                result = None
+                new_state = None
+
+    if result is None:
+        new_state = health_rs.collect_duplicates_state(project_dir)
+        result = health_rs.assemble_duplicates_from_json(list(new_state.values()))
+
+    if new_state is not None:
+        head = cache_mod.head_hash(project_dir)
+        if head:
+            cache_mod.put_file_data(project_dir, head, "duplicates", new_state)
+
+    return result
+
+
 def run_all_checks(project_dir: str, *, use_cache: bool = True) -> HealthReport:
     """Run all Phase 1 checks and assemble a HealthReport.
 
@@ -325,9 +370,11 @@ def run_all_checks(project_dir: str, *, use_cache: bool = True) -> HealthReport:
         except BaseException as e:
             log.error("dead_code scan error: %s", e)
 
-        # Check 2.5: Duplicate Code
+        # Check 2.5: Duplicate Code (delta-aware via file_data_cache)
         try:
-            dup_result = health_rs.scan_duplicates(project_dir)
+            dup_result = _run_duplicates(
+                health_rs, project_dir, delta_context=delta_context,
+            )
             for dup in dup_result.duplicates[:15]:
                 report.findings.append(HealthFinding(
                     check_id="dead.duplicates",

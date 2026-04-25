@@ -63,6 +63,9 @@ fn health(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<duplicates::DuplicateBlock>()?;
     m.add_class::<duplicates::DuplicatesResult>()?;
     m.add_function(wrap_pyfunction!(duplicates::scan_duplicates, m)?)?;
+    m.add_function(wrap_pyfunction!(duplicates::parse_duplicates_file_json, m)?)?;
+    m.add_function(wrap_pyfunction!(duplicates::assemble_duplicates_from_json, m)?)?;
+    m.add_function(wrap_pyfunction!(duplicates::collect_duplicates_state, m)?)?;
 
     m.add_class::<overengineering::OverengineeringIssue>()?;
     m.add_class::<overengineering::OverengineeringResult>()?;
