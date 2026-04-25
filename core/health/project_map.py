@@ -86,6 +86,61 @@ def scan_config_inventory(project_dir: str) -> ConfigInventoryResult:
     )
 
 
+def _run_module_map(
+    health_rs,
+    project_dir: str,
+    entry_paths: list[str],
+    *,
+    scan_ctx,
+    delta_context,
+):
+    """Module-map dispatch: delta when ancestor state is cached, full
+    scan otherwise. Always persists state under the current HEAD so
+    the next delta-eligible run can be incremental.
+    """
+    from core.health import cache as cache_mod
+    from core.health.module_map import incremental_module_map_scan
+
+    new_state: dict[str, str] | None = None
+    result = None
+
+    if delta_context is not None:
+        plan, _ancestor_report = delta_context
+        prior_state = cache_mod.get_file_data(
+            project_dir, plan.ancestor_hash, "module_map",
+        )
+        if prior_state:
+            try:
+                result, new_state = incremental_module_map_scan(
+                    health_rs, project_dir, entry_paths,
+                    prior_state,
+                    changed_paths=set(plan.added_or_modified),
+                    deleted_paths=set(plan.deleted),
+                )
+                log.info(
+                    "module_map: incremental run, %d carried over, %d re-parsed",
+                    len(prior_state) - len(plan.added_or_modified) - len(plan.deleted),
+                    len(plan.added_or_modified),
+                )
+            except BaseException as e:
+                log.error("incremental module_map failed, falling back: %s", e)
+                result = None
+                new_state = None
+
+    if result is None:
+        new_state = health_rs.collect_module_map_state(project_dir, scan_ctx)
+        result = health_rs.assemble_module_map_from_json(
+            project_dir, entry_paths, new_state, None,
+        )
+
+    if new_state is not None:
+        head = cache_mod.head_hash(project_dir)
+        if head:
+            cache_mod.put_file_data(project_dir, head, "module_map", new_state)
+
+    return result
+
+
 def run_all_checks(project_dir: str, *, use_cache: bool = True) -> HealthReport:
     """Run all Phase 1 checks and assemble a HealthReport.
 
@@ -184,11 +239,13 @@ def run_all_checks(project_dir: str, *, use_cache: bool = True) -> HealthReport:
         except BaseException as e:
             log.error("entry_points scan error: %s", e)
 
-        # Check 1.3 — Module Map
+        # Check 1.3 — Module Map (delta-aware via file_data_cache)
         try:
             entry_paths = [ep["path"] for ep in report.entry_points]
-            mm_result = health_rs.scan_module_map_with_context(
-                scan_ctx, project_dir, entry_paths,
+            mm_result = _run_module_map(
+                health_rs, project_dir, entry_paths,
+                scan_ctx=scan_ctx,
+                delta_context=delta_context,
             )
             report.module_map = {
                 "hub_modules": list(mm_result.hub_modules),

@@ -50,7 +50,7 @@ pub struct ModuleMapResult {
 }
 
 /// An import with metadata about whether it's at module top-level.
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 struct ImportEntry {
     module: String,
     /// true when the import sits at module top-level (not inside a function/method/class body).
@@ -568,6 +568,135 @@ pub fn scan_module_map_with_context(
     scan_module_map_inner(path, entry_point_paths, Some(ctx))
 }
 
+/// Parse one source file and return a JSON-encoded `Vec<ImportEntry>` of
+/// its raw (unresolved) imports. Used by the incremental orchestrator: it
+/// re-parses just the changed files and replays cached entries for the
+/// rest, then runs the cross-file resolve+graph phase via
+/// `assemble_module_map_from_json`.
+#[pyfunction]
+pub fn parse_module_map_file_json(
+    rel_path: &str,
+    content: &str,
+    ext: &str,
+) -> PyResult<String> {
+    let entries = if ext == "py" {
+        extract_python_imports(content, rel_path, None)
+    } else {
+        // js / ts / jsx / tsx / mjs / cjs / mts / cts all go through the
+        // JS extractor which handles language switching internally.
+        extract_js_imports(content, rel_path, ext, None)
+    };
+    serde_json::to_string(&entries)
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
+}
+
+/// Walk the source tree and return `{rel_path: imports_json}` covering
+/// every file that contributes to the module graph. Used by the
+/// orchestrator to populate file_data_cache on full scans.
+#[pyfunction]
+#[pyo3(signature = (path, ctx=None))]
+pub fn collect_module_map_state(
+    path: &str,
+    ctx: Option<&ScanContext>,
+) -> PyResult<std::collections::HashMap<String, String>> {
+    let root = Path::new(path);
+    if !root.is_dir() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            format!("Not a directory: {path}"),
+        ));
+    }
+    let mut out = std::collections::HashMap::new();
+    let opts = WalkOpts {
+        skip_generated: false,
+        ..WalkOpts::default()
+    };
+    for src in collect_source_files(root, &opts) {
+        let ext = src.ext.as_str();
+        let lang_supported = matches!(
+            ext,
+            "py" | "js" | "jsx" | "mjs" | "cjs" | "ts" | "tsx" | "mts" | "cts"
+        );
+        if !lang_supported {
+            continue;
+        }
+        let content_holder = if let Some(ctx) = ctx {
+            ctx.read_file(&src.rel_path, &src.abs_path)
+        } else {
+            fs::read_to_string(&src.abs_path).ok().map(std::sync::Arc::new)
+        };
+        let Some(content_arc) = content_holder else {
+            continue;
+        };
+        let entries = if ext == "py" {
+            extract_python_imports(content_arc.as_str(), &src.rel_path, ctx)
+        } else {
+            extract_js_imports(content_arc.as_str(), &src.rel_path, ext, ctx)
+        };
+        match serde_json::to_string(&entries) {
+            Ok(payload) => {
+                out.insert(src.rel_path, payload);
+            }
+            Err(e) => eprintln!(
+                "collect_module_map_state: serialize failed for {}: {e}",
+                src.rel_path
+            ),
+        }
+    }
+    Ok(out)
+}
+
+/// Run the cross-file resolve + graph + circular-deps + orphan-candidates
+/// analysis from a `{rel_path: imports_json}` state plus the project root
+/// and entry paths. Returns the same ModuleMapResult shape as
+/// `scan_module_map`.
+///
+/// `all_files` lets the assemble step know about non-source files (e.g.
+/// generated code) for correct orphan detection. Pass an explicit list
+/// when the caller needs full fidelity; default empty Vec means "use
+/// only the keys of file_states".
+#[pyfunction]
+#[pyo3(signature = (path, entry_point_paths, file_states, all_files=None))]
+pub fn assemble_module_map_from_json(
+    path: &str,
+    entry_point_paths: Vec<String>,
+    file_states: std::collections::HashMap<String, String>,
+    all_files: Option<Vec<String>>,
+) -> PyResult<ModuleMapResult> {
+    let root = Path::new(path);
+    if !root.is_dir() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            format!("Not a directory: {path}"),
+        ));
+    }
+
+    let mut raw: HashMap<String, Vec<ImportEntry>> = HashMap::with_capacity(file_states.len());
+    for (rel_path, payload) in file_states {
+        match serde_json::from_str::<Vec<ImportEntry>>(&payload) {
+            Ok(entries) => {
+                raw.insert(rel_path, entries);
+            }
+            Err(e) => eprintln!(
+                "assemble_module_map_from_json: skipping malformed payload for {rel_path}: {e}"
+            ),
+        }
+    }
+
+    // all_files defaults to the keys of raw, but the caller can pass an
+    // explicit superset (e.g. files we walked but skipped for parsing
+    // because of language) so orphan detection sees them.
+    let all_files: HashSet<String> = match all_files {
+        Some(v) => v.into_iter().collect(),
+        None => raw.keys().cloned().collect(),
+    };
+
+    Ok(compute_module_map_from_imports(
+        root,
+        &all_files,
+        &raw,
+        &entry_point_paths,
+    ))
+}
+
 fn scan_module_map_inner(
     path: &str,
     entry_point_paths: Vec<String>,
@@ -581,7 +710,7 @@ fn scan_module_map_inner(
     }
 
     let mut all_files: HashSet<String> = HashSet::new();
-    let mut source_files: Vec<(PathBuf, String)> = Vec::new();
+    let mut raw_per_file: HashMap<String, Vec<ImportEntry>> = HashMap::new();
 
     // module_map keeps generated files in the graph so it can resolve
     // imports of generated code that are still referenced from hand-written
@@ -592,8 +721,49 @@ fn scan_module_map_inner(
     };
     for src in collect_source_files(root, &opts) {
         all_files.insert(src.rel_path.clone());
-        source_files.push((src.abs_path, src.rel_path));
+        let ext = src.ext.as_str();
+        let lang_supported = matches!(
+            ext,
+            "py" | "js" | "jsx" | "mjs" | "cjs" | "ts" | "tsx" | "mts" | "cts"
+        );
+        if !lang_supported {
+            continue;
+        }
+        let content_holder = if let Some(ctx) = ctx {
+            ctx.read_file(&src.rel_path, &src.abs_path)
+        } else {
+            fs::read_to_string(&src.abs_path).ok().map(std::sync::Arc::new)
+        };
+        let Some(content_arc) = content_holder else {
+            continue;
+        };
+        let entries = if ext == "py" {
+            extract_python_imports(content_arc.as_str(), &src.rel_path, ctx)
+        } else {
+            extract_js_imports(content_arc.as_str(), &src.rel_path, ext, ctx)
+        };
+        raw_per_file.insert(src.rel_path, entries);
     }
+
+    Ok(compute_module_map_from_imports(
+        root,
+        &all_files,
+        &raw_per_file,
+        &entry_point_paths,
+    ))
+}
+
+/// Cross-file phase: resolve imports against the project's actual files,
+/// build the dependency graph, derive hubs, circular pairs and orphan
+/// candidates. Pulled out so the incremental orchestrator can hand us a
+/// pre-assembled `raw_per_file` (mostly carried over from cache, with
+/// only changed files freshly parsed).
+fn compute_module_map_from_imports(
+    root: &Path,
+    all_files: &HashSet<String>,
+    raw_per_file: &HashMap<String, Vec<ImportEntry>>,
+    entry_point_paths: &[String],
+) -> ModuleMapResult {
 
     // Top-level directory names that contain at least one source file —
     // used to classify absolute Python imports as local.
@@ -606,8 +776,8 @@ fn scan_module_map_inner(
     // src/ layout: `src/foo/bar.py` means `foo` is also a package root.
     // Same for `packages/foo/...` monorepo layout.
     for prefix in &["src/", "packages/"] {
-        for f in &all_files {
-            if let Some(rest) = f.strip_prefix(prefix) {
+        for f in all_files {
+            if let Some(rest) = f.strip_prefix(*prefix) {
                 if let Some(pkg) = rest.split('/').next() {
                     if !pkg.is_empty() && !pkg.ends_with(".py") {
                         package_roots.insert(pkg.to_string());
@@ -636,40 +806,24 @@ fn scan_module_map_inner(
     // Count unique importers per target file (not per symbol).
     let mut imported_by_set: HashMap<String, HashSet<String>> = HashMap::new();
 
-    for (abs_path, rel_path) in &source_files {
-        let ext = abs_path
+    for (rel_path, raw_imports) in raw_per_file {
+        // Determine extension from the rel_path (no abs_path needed beyond
+        // root.join() for resolve calls).
+        let ext = std::path::Path::new(rel_path)
             .extension()
             .and_then(|e| e.to_str())
             .unwrap_or("");
-
-        // Prefer the cross-scanner cache when one was provided so other
-        // context-aware scanners can reuse the same allocation.
-        let content_holder = if let Some(ctx) = ctx {
-            ctx.read_file(rel_path, abs_path)
-        } else {
-            fs::read_to_string(abs_path).ok().map(std::sync::Arc::new)
-        };
-        let Some(content_arc) = content_holder else {
-            continue;
-        };
-        let content: &str = content_arc.as_str();
-
         let lang = match ext {
             "py" => "python",
             "js" | "jsx" | "mjs" | "cjs" | "ts" | "tsx" | "mts" | "cts" => "js",
-            // Skip languages without import resolution support.
             _ => continue,
         };
-        let raw_imports = if ext == "py" {
-            extract_python_imports(content, rel_path, ctx)
-        } else {
-            extract_js_imports(content, rel_path, ext, ctx)
-        };
+        let abs_path: PathBuf = root.join(rel_path);
 
         let mut resolved = Vec::new();
-        for entry in &raw_imports {
+        for entry in raw_imports {
             if is_local_import(&entry.module, lang, &package_roots, &local_stems) {
-                let resolved_opt = resolve_local_import(&entry.module, abs_path, root, &all_files, lang);
+                let resolved_opt = resolve_local_import(&entry.module, &abs_path, root, all_files, lang);
                 if let Some(resolved_path) = resolved_opt
                 {
                     if &resolved_path != rel_path {
@@ -678,7 +832,6 @@ fn scan_module_map_inner(
                             .entry(resolved_path.clone())
                             .or_default()
                             .insert(rel_path.clone());
-                        // Track whether the edge from this source to target is top-level.
                         let key = (rel_path.clone(), resolved_path);
                         let e = edge_is_top_level.entry(key).or_insert(false);
                         if entry.is_top_level {
@@ -834,10 +987,10 @@ fn scan_module_map_inner(
         .cloned()
         .collect();
 
-    Ok(ModuleMapResult {
+    ModuleMapResult {
         modules,
         hub_modules,
         circular_deps: circular,
         orphan_candidates,
-    })
+    }
 }

@@ -37,6 +37,9 @@ fn health(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<module_map::ModuleMapResult>()?;
     m.add_function(wrap_pyfunction!(module_map::scan_module_map, m)?)?;
     m.add_function(wrap_pyfunction!(module_map::scan_module_map_with_context, m)?)?;
+    m.add_function(wrap_pyfunction!(module_map::parse_module_map_file_json, m)?)?;
+    m.add_function(wrap_pyfunction!(module_map::assemble_module_map_from_json, m)?)?;
+    m.add_function(wrap_pyfunction!(module_map::collect_module_map_state, m)?)?;
 
     m.add_class::<dead_code::UnusedImport>()?;
     m.add_class::<dead_code::UnusedDefinition>()?;
