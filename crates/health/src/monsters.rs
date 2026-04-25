@@ -3,11 +3,11 @@
 //! Finds files > 500 lines with function/class counts via tree-sitter.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use pyo3::prelude::*;
 
-use crate::common::{collect_source_files, WalkOpts};
+use crate::common::{collect_source_files, is_generated_or_data_file, normalize_path, SOURCE_EXTENSIONS, WalkOpts};
 
 #[pyclass]
 #[derive(Clone)]
@@ -104,6 +104,30 @@ fn count_definitions_js(content: &str, is_ts: bool) -> (u32, u32) {
     (functions, classes)
 }
 
+/// Pure per-file analysis. Returns `None` when the file is too small to be
+/// a "monster" or when reading/parsing fails — callers should treat that
+/// as "this file produces no finding" rather than as an error.
+fn analyze_monster_file(abs_path: &Path, rel_path: String, ext: &str) -> Option<MonsterFile> {
+    let content = fs::read_to_string(abs_path).ok()?;
+
+    let line_count = content.lines().filter(|l| !l.trim().is_empty()).count() as u32;
+    let severity = severity_for_lines(line_count)?;
+
+    let (functions, classes) = match ext {
+        "py" => count_definitions_python(&content),
+        "ts" | "tsx" | "mts" | "cts" => count_definitions_js(&content, true),
+        _ => count_definitions_js(&content, false),
+    };
+
+    Some(MonsterFile {
+        path: rel_path,
+        lines: line_count,
+        functions,
+        classes,
+        severity: severity.to_string(),
+    })
+}
+
 #[pyfunction]
 pub fn scan_monsters(path: &str) -> PyResult<MonstersResult> {
     let root = Path::new(path);
@@ -116,34 +140,53 @@ pub fn scan_monsters(path: &str) -> PyResult<MonstersResult> {
     let mut monsters: Vec<MonsterFile> = Vec::new();
 
     for src in collect_source_files(root, &WalkOpts::default()) {
-        let content = match fs::read_to_string(&src.abs_path) {
-            Ok(c) => c,
-            Err(_) => continue,
-        };
-
-        let line_count = content.lines().filter(|l| !l.trim().is_empty()).count() as u32;
-
-        let severity = match severity_for_lines(line_count) {
-            Some(s) => s,
-            None => continue,
-        };
-
-        let (functions, classes) = match src.ext.as_str() {
-            "py" => count_definitions_python(&content),
-            "ts" | "tsx" | "mts" | "cts" => count_definitions_js(&content, true),
-            _ => count_definitions_js(&content, false),
-        };
-
-        monsters.push(MonsterFile {
-            path: src.rel_path,
-            lines: line_count,
-            functions,
-            classes,
-            severity: severity.to_string(),
-        });
+        if let Some(m) = analyze_monster_file(&src.abs_path, src.rel_path, src.ext.as_str()) {
+            monsters.push(m);
+        }
     }
 
     monsters.sort_by(|a, b| b.lines.cmp(&a.lines));
+    Ok(MonstersResult { monsters })
+}
 
+/// Per-file variant: analyse only the explicitly-given relative paths.
+/// Used by the orchestrator's git-delta path so a small change set
+/// re-scans a few files instead of walking the whole tree.
+///
+/// Files that don't exist (e.g. deleted between the cached commit and HEAD),
+/// have a non-source extension, or look generated are silently skipped —
+/// callers handle "removed file" by pruning the cached entry separately.
+#[pyfunction]
+pub fn scan_monsters_files(root: &str, files: Vec<String>) -> PyResult<MonstersResult> {
+    let root_path = Path::new(root);
+    if !root_path.is_dir() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            format!("Not a directory: {root}"),
+        ));
+    }
+
+    let mut monsters: Vec<MonsterFile> = Vec::new();
+    for rel_raw in files {
+        let rel_norm = normalize_path(&rel_raw);
+        if is_generated_or_data_file(&rel_norm) {
+            continue;
+        }
+        let abs_path: PathBuf = root_path.join(&rel_norm);
+        let Some(ext_raw) = abs_path.extension().and_then(|e| e.to_str()) else {
+            continue;
+        };
+        let ext_lower = ext_raw.to_ascii_lowercase();
+        if !SOURCE_EXTENSIONS.iter().any(|e| e.eq_ignore_ascii_case(&ext_lower)) {
+            continue;
+        }
+        if !abs_path.is_file() {
+            continue;
+        }
+        if let Some(m) = analyze_monster_file(&abs_path, rel_norm, &ext_lower) {
+            monsters.push(m);
+        }
+    }
+
+    monsters.sort_by(|a, b| b.lines.cmp(&a.lines));
     Ok(MonstersResult { monsters })
 }

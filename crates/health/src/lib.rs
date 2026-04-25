@@ -26,6 +26,7 @@ fn health(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<monsters::MonsterFile>()?;
     m.add_class::<monsters::MonstersResult>()?;
     m.add_function(wrap_pyfunction!(monsters::scan_monsters, m)?)?;
+    m.add_function(wrap_pyfunction!(monsters::scan_monsters_files, m)?)?;
 
     m.add_class::<module_map::ModuleInfo>()?;
     m.add_class::<module_map::CircularDep>()?;
@@ -44,6 +45,7 @@ fn health(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<tech_debt::TodoItem>()?;
     m.add_class::<tech_debt::TechDebtResult>()?;
     m.add_function(wrap_pyfunction!(tech_debt::scan_tech_debt, m)?)?;
+    m.add_function(wrap_pyfunction!(tech_debt::scan_tech_debt_files, m)?)?;
 
     m.add_class::<duplicates::DuplicateBlock>()?;
     m.add_class::<duplicates::DuplicatesResult>()?;

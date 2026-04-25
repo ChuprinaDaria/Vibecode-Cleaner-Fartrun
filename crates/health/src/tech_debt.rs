@@ -3,12 +3,15 @@
 //! Missing type hints, error handling gaps, hardcoded values, TODO/FIXME audit.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use pyo3::prelude::*;
 use regex::Regex;
 
-use crate::common::{collect_source_files, is_test_path, WalkOpts};
+use crate::common::{
+    collect_source_files, is_generated_or_data_file, is_test_path, normalize_path,
+    SOURCE_EXTENSIONS, WalkOpts,
+};
 
 // --- PyO3 result structs ---
 
@@ -453,6 +456,40 @@ fn check_todos(content: &str, rel_path: &str) -> Vec<TodoItem> {
 
 // --- Main scan function ---
 
+/// Run all per-file tech-debt checks for a single file and append findings
+/// to the four result vectors. Pure function — no cross-file state.
+fn analyze_tech_debt_file(
+    abs_path: &Path,
+    rel_path: &str,
+    ext: &str,
+    missing_types: &mut Vec<MissingType>,
+    error_gaps: &mut Vec<ErrorGap>,
+    hardcoded: &mut Vec<HardcodedValue>,
+    todos: &mut Vec<TodoItem>,
+) {
+    let is_test = is_test_path(rel_path);
+    let Ok(content) = fs::read_to_string(abs_path) else {
+        return;
+    };
+
+    if ext == "py" {
+        if !is_test {
+            missing_types.extend(check_missing_types_python(&content, rel_path));
+        }
+        error_gaps.extend(check_error_gaps_python(&content, rel_path));
+    } else {
+        let is_ts = matches!(ext, "ts" | "tsx" | "mts" | "cts");
+        error_gaps.extend(check_error_gaps_js(&content, rel_path, is_ts));
+        // JS type hint check only for .js (TS already has types)
+        // Skip for now — JSDoc parsing is complex, add later
+    }
+
+    if !is_test {
+        hardcoded.extend(check_hardcoded(&content, rel_path));
+    }
+    todos.extend(check_todos(&content, rel_path));
+}
+
 #[pyfunction]
 pub fn scan_tech_debt(path: &str) -> PyResult<TechDebtResult> {
     let root = Path::new(path);
@@ -468,35 +505,63 @@ pub fn scan_tech_debt(path: &str) -> PyResult<TechDebtResult> {
     let mut todos = Vec::new();
 
     for src in collect_source_files(root, &WalkOpts::default()) {
-        let is_test = is_test_path(&src.rel_path);
-
-        let content = match fs::read_to_string(&src.abs_path) {
-            Ok(c) => c,
-            Err(_) => continue,
-        };
-
-        if src.ext == "py" {
-            if !is_test {
-                missing_types.extend(check_missing_types_python(&content, &src.rel_path));
-            }
-            error_gaps.extend(check_error_gaps_python(&content, &src.rel_path));
-        } else {
-            let is_ts = matches!(src.ext.as_str(), "ts" | "tsx" | "mts" | "cts");
-            error_gaps.extend(check_error_gaps_js(&content, &src.rel_path, is_ts));
-            // JS type hint check only for .js (TS already has types)
-            // Skip for now — JSDoc parsing is complex, add later
-        }
-
-        if !is_test {
-            hardcoded.extend(check_hardcoded(&content, &src.rel_path));
-        }
-        todos.extend(check_todos(&content, &src.rel_path));
+        analyze_tech_debt_file(
+            &src.abs_path,
+            &src.rel_path,
+            src.ext.as_str(),
+            &mut missing_types,
+            &mut error_gaps,
+            &mut hardcoded,
+            &mut todos,
+        );
     }
 
-    Ok(TechDebtResult {
-        missing_types,
-        error_gaps,
-        hardcoded,
-        todos,
-    })
+    Ok(TechDebtResult { missing_types, error_gaps, hardcoded, todos })
+}
+
+/// Per-file variant: analyse only the explicitly-given relative paths.
+/// Same skip rules as `scan_tech_debt` (non-source extensions, generated
+/// files, missing files) — see `scan_monsters_files` for rationale.
+#[pyfunction]
+pub fn scan_tech_debt_files(root: &str, files: Vec<String>) -> PyResult<TechDebtResult> {
+    let root_path = Path::new(root);
+    if !root_path.is_dir() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            format!("Not a directory: {root}"),
+        ));
+    }
+
+    let mut missing_types = Vec::new();
+    let mut error_gaps = Vec::new();
+    let mut hardcoded = Vec::new();
+    let mut todos = Vec::new();
+
+    for rel_raw in files {
+        let rel_norm = normalize_path(&rel_raw);
+        if is_generated_or_data_file(&rel_norm) {
+            continue;
+        }
+        let abs_path: PathBuf = root_path.join(&rel_norm);
+        let Some(ext_raw) = abs_path.extension().and_then(|e| e.to_str()) else {
+            continue;
+        };
+        let ext_lower = ext_raw.to_ascii_lowercase();
+        if !SOURCE_EXTENSIONS.iter().any(|e| e.eq_ignore_ascii_case(&ext_lower)) {
+            continue;
+        }
+        if !abs_path.is_file() {
+            continue;
+        }
+        analyze_tech_debt_file(
+            &abs_path,
+            &rel_norm,
+            &ext_lower,
+            &mut missing_types,
+            &mut error_gaps,
+            &mut hardcoded,
+            &mut todos,
+        );
+    }
+
+    Ok(TechDebtResult { missing_types, error_gaps, hardcoded, todos })
 }
