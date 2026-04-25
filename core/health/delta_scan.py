@@ -100,3 +100,41 @@ def append_full_monsters(report: HealthReport, monsters_result) -> None:
     report.monsters = [_make_monster_dict(m) for m in monsters_result.monsters]
     for m in monsters_result.monsters:
         report.findings.append(_make_monster_finding(m))
+
+
+def apply_tech_debt_delta(
+    report: HealthReport,
+    health_rs,
+    project_dir: str,
+    plan: DeltaPlan,
+    ancestor: HealthReport,
+) -> None:
+    """Patch tech-debt findings (`debt.no_types`, `debt.error_handling`,
+    `debt.hardcoded`, `debt.todos`) using cached ancestor data plus a
+    per-file rescan of `plan.added_or_modified`.
+
+    Findings without a `path` in details are dropped on delta replay —
+    the per-file rescan recreates entries for changed files; entries for
+    unchanged files are lost once and refreshed by the next full scan.
+    """
+    from core.health import tech_debt as tech_debt_mod
+
+    changed_set = set(plan.added_or_modified) | set(plan.deleted)
+
+    for f in ancestor.findings:
+        if f.check_id not in tech_debt_mod.CHECK_IDS:
+            continue
+        path = (f.details or {}).get("path")
+        if path is not None and path not in changed_set:
+            report.findings.append(f)
+
+    if plan.added_or_modified:
+        try:
+            result = health_rs.scan_tech_debt_files(project_dir, plan.added_or_modified)
+        except BaseException as e:
+            log.error("delta_scan: scan_tech_debt_files failed: %s", e)
+            return
+        # Per-file rescan returns the un-capped result for the small set of
+        # changed files; we append every finding without re-capping. See
+        # `tech_debt.append_findings_from_result` for why.
+        tech_debt_mod.append_findings_from_result(report, result, project_dir)

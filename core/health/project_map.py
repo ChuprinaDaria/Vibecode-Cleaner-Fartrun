@@ -292,10 +292,16 @@ def run_all_checks(project_dir: str, *, use_cache: bool = True) -> HealthReport:
         except BaseException as e:
             log.error("ux_sanity scan error: %s", e)
 
-        # Phase 3: Tech Debt
+        # Phase 3: Tech Debt (delta-aware)
         try:
-            from core.health.tech_debt import run_tech_debt_checks
-            run_tech_debt_checks(report, health_rs, project_dir)
+            if delta_context is not None:
+                plan, ancestor = delta_context
+                delta_scan.apply_tech_debt_delta(
+                    report, health_rs, project_dir, plan, ancestor,
+                )
+            else:
+                from core.health.tech_debt import run_tech_debt_checks
+                run_tech_debt_checks(report, health_rs, project_dir)
         except BaseException as e:
             log.error("tech_debt scan error: %s", e)
 

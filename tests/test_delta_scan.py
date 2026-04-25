@@ -165,6 +165,117 @@ class TestApplyMonstersDelta:
         assert report.findings == []
 
 
+# --- unit tests for apply_tech_debt_delta ---
+
+
+class TestApplyTechDebtDelta:
+    def test_carries_unchanged_findings(self):
+        ancestor = HealthReport(project_dir="/p")
+        ancestor.findings = [
+            HealthFinding(check_id="debt.todos", title="t",
+                          severity="low", message="m",
+                          details={"path": "stable.py", "line": 4}),
+            HealthFinding(check_id="debt.hardcoded", title="h",
+                          severity="low", message="m",
+                          details={"path": "stable.py", "line": 7}),
+        ]
+        report = HealthReport(project_dir="/p")
+        plan = DeltaPlan(ancestor_hash="abc", changed=[])
+
+        class _Stub:
+            def scan_tech_debt_files(self, *a, **k):
+                raise AssertionError("not called when nothing changed")
+
+        delta_scan.apply_tech_debt_delta(report, _Stub(), "/p", plan, ancestor)
+        assert len(report.findings) == 2
+        assert {f.check_id for f in report.findings} == {"debt.todos", "debt.hardcoded"}
+
+    def test_drops_findings_for_changed_path_and_rescans(self):
+        ancestor = HealthReport(project_dir="/p")
+        ancestor.findings = [
+            HealthFinding(check_id="debt.todos", title="t1",
+                          severity="low", message="m",
+                          details={"path": "old.py", "line": 4}),
+            HealthFinding(check_id="debt.todos", title="t2",
+                          severity="low", message="m",
+                          details={"path": "stable.py", "line": 4}),
+        ]
+        report = HealthReport(project_dir="/p")
+        plan = DeltaPlan(
+            ancestor_hash="abc",
+            changed=[FileChange(status="M", path="old.py")],
+        )
+
+        class _Todo:
+            kind = "TODO"
+            path = "old.py"
+            line = 12
+            text = "fix later"
+
+        class _Result:
+            missing_types = []
+            error_gaps = []
+            hardcoded = []
+            todos = [_Todo()]
+
+        class _Stub:
+            def scan_tech_debt_files(self, root, files):
+                assert files == ["old.py"]
+                return _Result()
+
+        delta_scan.apply_tech_debt_delta(report, _Stub(), "/p", plan, ancestor)
+
+        # Stable findings carried over; old.py finding dropped; new one added.
+        paths = sorted(f.details["path"] for f in report.findings
+                       if f.check_id == "debt.todos")
+        assert paths == ["old.py", "stable.py"]
+        # Lines distinguish them — old finding had line 4, new has line 12.
+        old_lines = sorted(f.details["line"] for f in report.findings
+                           if f.details.get("path") == "old.py"
+                           and f.check_id == "debt.todos")
+        assert old_lines == [12]
+
+    def test_legacy_findings_without_path_dropped(self):
+        ancestor = HealthReport(project_dir="/p")
+        ancestor.findings.append(HealthFinding(
+            check_id="debt.hardcoded", title="h",
+            severity="low", message="m", details={},
+        ))
+        report = HealthReport(project_dir="/p")
+        plan = DeltaPlan(ancestor_hash="abc", changed=[])
+
+        class _Stub:
+            pass
+
+        delta_scan.apply_tech_debt_delta(report, _Stub(), "/p", plan, ancestor)
+        assert report.findings == []
+
+    def test_non_tech_debt_findings_passed_over(self):
+        """apply_tech_debt_delta must not touch findings from other checks —
+        those are handled by their own scanner blocks (or carried over by
+        their own delta helper). It must not duplicate or filter them."""
+        ancestor = HealthReport(project_dir="/p")
+        ancestor.findings = [
+            HealthFinding(check_id="map.monsters", title="m",
+                          severity="medium", message="x",
+                          details={"path": "old.py"}),
+            HealthFinding(check_id="debt.todos", title="t",
+                          severity="low", message="m",
+                          details={"path": "stable.py", "line": 1}),
+        ]
+        report = HealthReport(project_dir="/p")
+        plan = DeltaPlan(ancestor_hash="abc", changed=[])
+
+        class _Stub:
+            pass
+
+        delta_scan.apply_tech_debt_delta(report, _Stub(), "/p", plan, ancestor)
+        # Only the tech-debt finding ends up here; map.monsters is left
+        # for apply_monsters_delta in the orchestrator.
+        check_ids = [f.check_id for f in report.findings]
+        assert check_ids == ["debt.todos"]
+
+
 # --- integration test against a real git repo ---
 
 
@@ -233,3 +344,49 @@ class TestRunAllChecksDeltaPath:
         second = run_all_checks(str(repo))
         assert sorted(m["path"] for m in first.monsters) == \
                sorted(m["path"] for m in second.monsters)
+
+    def test_tech_debt_delta_matches_full_rerun(self, tmp_path):
+        """End-to-end: tech_debt findings produced via the delta path must
+        cover the same (path, line) tuples as a fresh full scan."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        (repo / "a.py").write_text(
+            "# TODO: a-thing\n"
+            "def f(x):\n    return x\n"
+        )
+        (repo / "b.py").write_text(
+            "# FIXME: still\n"
+            "def g(y):\n    return y\n"
+        )
+        _git(repo, "init", "-q", "-b", "main")
+        _commit(repo, "init")
+
+        # First run caches at c0.
+        run_all_checks(str(repo))
+
+        # Add a TODO in a new file, modify b.py to add a hardcoded URL.
+        (repo / "c.py").write_text(
+            "# TODO: brand new\n"
+            "def h():\n    return None\n"
+        )
+        (repo / "b.py").write_text(
+            "# FIXME: still\n"
+            'URL = "https://api.example.com/v1/users"\n'
+            "def g(y):\n    return y\n"
+        )
+        _commit(repo, "edit b + add c")
+
+        delta_report = run_all_checks(str(repo))
+
+        cache.clear(str(repo))
+        full_report = run_all_checks(str(repo), use_cache=False)
+
+        def _key(findings):
+            return sorted(
+                (f.check_id, f.details.get("path"), f.details.get("line"))
+                for f in findings
+                if f.check_id.startswith("debt.")
+                and f.details and "path" in f.details
+            )
+
+        assert _key(delta_report.findings) == _key(full_report.findings)
