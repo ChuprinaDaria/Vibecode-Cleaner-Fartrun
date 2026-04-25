@@ -5,10 +5,9 @@
 use std::fs;
 use std::path::Path;
 
-use ignore::WalkBuilder;
 use pyo3::prelude::*;
 
-use crate::common::{is_generated_or_data_file, should_skip_entry, SOURCE_EXTENSIONS};
+use crate::common::{collect_source_files, WalkOpts};
 
 #[pyclass]
 #[derive(Clone)]
@@ -73,10 +72,17 @@ fn count_definitions_python(content: &str) -> (u32, u32) {
 
 fn count_definitions_js(content: &str, is_ts: bool) -> (u32, u32) {
     let mut parser = tree_sitter::Parser::new();
-    if is_ts {
-        let _ = parser.set_language(&tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into());
+    let lang_result = if is_ts {
+        parser.set_language(&tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into())
     } else {
-        let _ = parser.set_language(&tree_sitter_javascript::LANGUAGE.into());
+        parser.set_language(&tree_sitter_javascript::LANGUAGE.into())
+    };
+    if let Err(e) = lang_result {
+        eprintln!(
+            "health::monsters: set_language({}) failed: {e}",
+            if is_ts { "ts" } else { "js" }
+        );
+        return (0, 0);
     }
 
     let tree = match parser.parse(content, None) {
@@ -109,41 +115,8 @@ pub fn scan_monsters(path: &str) -> PyResult<MonstersResult> {
 
     let mut monsters: Vec<MonsterFile> = Vec::new();
 
-    let walker = WalkBuilder::new(root)
-        .hidden(false)
-        .git_ignore(true)
-        .git_global(false)
-        .git_exclude(true)
-        .filter_entry(|entry| !should_skip_entry(entry))
-        .build();
-
-    for entry in walker.flatten() {
-        let entry_path = entry.path();
-        if !entry_path.is_file() {
-            continue;
-        }
-
-        let ext = match entry_path.extension().and_then(|e| e.to_str()) {
-            Some(e) => e,
-            None => continue,
-        };
-
-        if !SOURCE_EXTENSIONS.contains(&ext) {
-            continue;
-        }
-
-        // Skip generated code, mock/seed data, vendored binaries — these are
-        // never the "monster" the dev needs to refactor.
-        let rel_for_check = entry_path
-            .strip_prefix(root)
-            .unwrap_or(entry_path)
-            .to_string_lossy()
-            .to_string();
-        if is_generated_or_data_file(&rel_for_check) {
-            continue;
-        }
-
-        let content = match fs::read_to_string(entry_path) {
+    for src in collect_source_files(root, &WalkOpts::default()) {
+        let content = match fs::read_to_string(&src.abs_path) {
             Ok(c) => c,
             Err(_) => continue,
         };
@@ -155,22 +128,14 @@ pub fn scan_monsters(path: &str) -> PyResult<MonstersResult> {
             None => continue,
         };
 
-        let (functions, classes) = if ext == "py" {
-            count_definitions_python(&content)
-        } else if ext == "ts" || ext == "tsx" || ext == "mts" || ext == "cts" {
-            count_definitions_js(&content, true)
-        } else {
-            count_definitions_js(&content, false)
+        let (functions, classes) = match src.ext.as_str() {
+            "py" => count_definitions_python(&content),
+            "ts" | "tsx" | "mts" | "cts" => count_definitions_js(&content, true),
+            _ => count_definitions_js(&content, false),
         };
 
-        let rel_path = entry_path
-            .strip_prefix(root)
-            .unwrap_or(entry_path)
-            .to_string_lossy()
-            .to_string();
-
         monsters.push(MonsterFile {
-            path: rel_path,
+            path: src.rel_path,
             lines: line_count,
             functions,
             classes,

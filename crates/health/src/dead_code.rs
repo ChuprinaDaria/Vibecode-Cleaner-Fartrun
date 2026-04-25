@@ -8,10 +8,9 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
-use ignore::WalkBuilder;
 use pyo3::prelude::*;
 
-use crate::common::{is_generated_or_data_file, should_skip_entry, SOURCE_EXTENSIONS};
+use crate::common::{collect_source_files, WalkOpts};
 
 #[pyclass]
 #[derive(Clone)]
@@ -1093,27 +1092,8 @@ pub fn scan_dead_code(path: &str, _entry_point_paths: Vec<String>) -> PyResult<D
     // Phase 1: Parse all source files
     let mut file_data: Vec<FileData> = Vec::new();
 
-    let walker = WalkBuilder::new(root)
-        .hidden(false)
-        .git_ignore(true)
-        .git_global(false)
-        .git_exclude(true)
-        .filter_entry(|entry| !should_skip_entry(entry))
-        .build();
-
-    for entry in walker.flatten() {
-        let entry_path = entry.path();
-        if !entry_path.is_file() {
-            continue;
-        }
-        let ext = match entry_path.extension().and_then(|e| e.to_str()) {
-            Some(e) => e,
-            None => continue,
-        };
-        if !SOURCE_EXTENSIONS.contains(&ext) {
-            continue;
-        }
-        let lang = match ext {
+    for src in collect_source_files(root, &WalkOpts::default()) {
+        let lang = match src.ext.as_str() {
             "py" => Lang::Python,
             "ts" | "mts" | "cts" => Lang::TypeScript,
             "tsx" | "jsx" => Lang::Tsx,
@@ -1123,20 +1103,11 @@ pub fn scan_dead_code(path: &str, _entry_point_paths: Vec<String>) -> PyResult<D
             // false dead-code results.
             _ => continue,
         };
-        let rel_path = match entry_path.strip_prefix(root) {
-            Ok(r) => crate::common::normalize_path(&r.to_string_lossy()),
-            Err(_) => continue,
-        };
-        // Skip generated/mock/seed data files — they're not hand-written,
-        // so flagging their imports/definitions/commented blocks is noise.
-        if is_generated_or_data_file(&rel_path) {
-            continue;
-        }
-        let content = match fs::read_to_string(entry_path) {
+        let content = match fs::read_to_string(&src.abs_path) {
             Ok(c) => c,
             Err(_) => continue,
         };
-        file_data.push(parse_file(&content, &rel_path, lang));
+        file_data.push(parse_file(&content, &src.rel_path, lang));
     }
 
     // Phase 2: Unused imports (per-file)

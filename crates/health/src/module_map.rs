@@ -7,10 +7,9 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use ignore::WalkBuilder;
 use pyo3::prelude::*;
 
-use crate::common::{is_generated_or_data_file, should_skip_entry, SOURCE_EXTENSIONS};
+use crate::common::{collect_source_files, is_generated_or_data_file, WalkOpts};
 
 #[pyclass]
 #[derive(Clone)]
@@ -537,31 +536,16 @@ pub fn scan_module_map(path: &str, entry_point_paths: Vec<String>) -> PyResult<M
     let mut all_files: HashSet<String> = HashSet::new();
     let mut source_files: Vec<(PathBuf, String)> = Vec::new();
 
-    let walker = WalkBuilder::new(root)
-        .hidden(false)
-        .git_ignore(true)
-        .git_global(false)
-        .git_exclude(true)
-        .filter_entry(|entry| !should_skip_entry(entry))
-        .build();
-
-    for entry in walker.flatten() {
-        let entry_path = entry.path();
-        if !entry_path.is_file() {
-            continue;
-        }
-        let ext = match entry_path.extension().and_then(|e| e.to_str()) {
-            Some(e) => e.to_string(),
-            None => continue,
-        };
-        if !SOURCE_EXTENSIONS.contains(&ext.as_str()) {
-            continue;
-        }
-        if let Ok(rel) = entry_path.strip_prefix(root) {
-            let rel_str = rel.to_string_lossy().replace('\\', "/");
-            all_files.insert(rel_str.clone());
-            source_files.push((entry_path.to_path_buf(), rel_str));
-        }
+    // module_map keeps generated files in the graph so it can resolve
+    // imports of generated code that are still referenced from hand-written
+    // sources. Disable the default skip-generated filter.
+    let opts = WalkOpts {
+        skip_generated: false,
+        ..WalkOpts::default()
+    };
+    for src in collect_source_files(root, &opts) {
+        all_files.insert(src.rel_path.clone());
+        source_files.push((src.abs_path, src.rel_path));
     }
 
     // Top-level directory names that contain at least one source file —

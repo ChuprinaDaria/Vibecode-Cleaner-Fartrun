@@ -1,5 +1,9 @@
 //! Shared constants and types for health checks.
 
+use std::path::{Path, PathBuf};
+
+use ignore::WalkBuilder;
+
 /// Directories to always skip, even if not in .gitignore.
 pub const ALWAYS_SKIP: &[&str] = &[
     "node_modules",
@@ -157,4 +161,94 @@ pub fn is_generated_or_data_file(rel_path: &str) -> bool {
         return true;
     }
     false
+}
+
+/// Return true if a relative path looks like test code. Pattern shared by
+/// duplicates, tech_debt, reusable, overengineering scanners.
+pub fn is_test_path(rel_path: &str) -> bool {
+    rel_path.contains("/test")
+        || rel_path.starts_with("test")
+        || rel_path.contains("/__tests__/")
+}
+
+/// One source file located by the walker. Owned data so callers can outlive
+/// the underlying `WalkBuilder` iterator without lifetime juggling.
+pub struct SourceFile {
+    pub abs_path: PathBuf,
+    /// Relative to the scan root, with forward-slash normalization.
+    pub rel_path: String,
+    /// Lowercase extension without the leading dot.
+    pub ext: String,
+}
+
+/// Options for `collect_source_files`.
+pub struct WalkOpts {
+    /// Maximum directory depth, or `None` for unlimited.
+    pub max_depth: Option<usize>,
+    /// Skip generated/mock/seed/vendored files (default: true).
+    pub skip_generated: bool,
+    /// Allowed extensions. Defaults to `SOURCE_EXTENSIONS`.
+    pub allowed_extensions: &'static [&'static str],
+}
+
+impl Default for WalkOpts {
+    fn default() -> Self {
+        Self {
+            max_depth: None,
+            skip_generated: true,
+            allowed_extensions: SOURCE_EXTENSIONS,
+        }
+    }
+}
+
+/// Walk `root` and return every source file matching `opts`. Centralizes the
+/// `WalkBuilder` boilerplate, extension filter, generated-file skip and path
+/// normalization that every scanner used to repeat (~30 LOC × 7 scanners).
+///
+/// Files that fail to be relativized against `root` are silently dropped —
+/// they cannot belong to the scanned tree by definition.
+pub fn collect_source_files(root: &Path, opts: &WalkOpts) -> Vec<SourceFile> {
+    let mut builder = WalkBuilder::new(root);
+    builder
+        .hidden(false)
+        .git_ignore(true)
+        .git_global(false)
+        .git_exclude(true)
+        .filter_entry(|entry| !should_skip_entry(entry));
+    if let Some(depth) = opts.max_depth {
+        builder.max_depth(Some(depth));
+    }
+
+    let mut out = Vec::new();
+    for entry in builder.build().flatten() {
+        let entry_path = entry.path();
+        if !entry_path.is_file() {
+            continue;
+        }
+        let Some(ext_raw) = entry_path.extension().and_then(|e| e.to_str()) else {
+            continue;
+        };
+        // Compare case-insensitively so we don't miss `Foo.PY` etc.
+        let ext_lower = ext_raw.to_ascii_lowercase();
+        if !opts
+            .allowed_extensions
+            .iter()
+            .any(|e| e.eq_ignore_ascii_case(&ext_lower))
+        {
+            continue;
+        }
+        let Ok(rel) = entry_path.strip_prefix(root) else {
+            continue;
+        };
+        let rel_path = normalize_path(&rel.to_string_lossy());
+        if opts.skip_generated && is_generated_or_data_file(&rel_path) {
+            continue;
+        }
+        out.push(SourceFile {
+            abs_path: entry_path.to_path_buf(),
+            rel_path,
+            ext: ext_lower,
+        });
+    }
+    out
 }

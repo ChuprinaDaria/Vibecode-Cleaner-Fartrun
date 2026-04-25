@@ -7,10 +7,9 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-use ignore::WalkBuilder;
 use pyo3::prelude::*;
 
-use crate::common::{is_generated_or_data_file, should_skip_entry};
+use crate::common::{collect_source_files, is_test_path, WalkOpts};
 
 /// Extensions that may contain JSX.
 const JSX_EXTENSIONS: &[&str] = &["jsx", "tsx"];
@@ -146,53 +145,33 @@ pub fn scan_reusable(path: &str) -> PyResult<ReusableResult> {
     // pattern → {files: set, count, preview}
     let mut pattern_map: HashMap<String, (Vec<String>, u32, String)> = HashMap::new();
 
-    let walker = WalkBuilder::new(root)
-        .hidden(false)
-        .git_ignore(true)
-        .git_global(false)
-        .git_exclude(true)
-        .filter_entry(|entry| !should_skip_entry(entry))
-        .build();
-
-    for entry in walker.flatten() {
-        let entry_path = entry.path();
-        if !entry_path.is_file() {
-            continue;
-        }
-        let ext = match entry_path.extension().and_then(|e| e.to_str()) {
-            Some(e) => e,
-            None => continue,
-        };
-        if !JSX_EXTENSIONS.contains(&ext) {
-            continue;
-        }
-        let rel_path = match entry_path.strip_prefix(root) {
-            Ok(r) => crate::common::normalize_path(&r.to_string_lossy()),
-            Err(_) => continue,
-        };
-
-        // Skip test files
-        if rel_path.contains("/test") || rel_path.starts_with("test") || rel_path.contains("/__tests__/") {
-            continue;
-        }
-        // Skip generated/mock files
-        if is_generated_or_data_file(&rel_path) {
+    let opts = WalkOpts {
+        allowed_extensions: JSX_EXTENSIONS,
+        ..WalkOpts::default()
+    };
+    for src in collect_source_files(root, &opts) {
+        if is_test_path(&src.rel_path) {
             continue;
         }
 
-        let content = match fs::read_to_string(entry_path) {
+        let content = match fs::read_to_string(&src.abs_path) {
             Ok(c) => c,
             Err(_) => continue,
         };
+        let rel_path = src.rel_path;
 
         // Parse with tree-sitter
         let mut parser = tree_sitter::Parser::new();
-        let lang = if ext == "tsx" {
+        let lang = if src.ext == "tsx" {
             tree_sitter_typescript::LANGUAGE_TSX.into()
         } else {
             tree_sitter_javascript::LANGUAGE.into()
         };
-        if parser.set_language(&lang).is_err() {
+        if let Err(e) = parser.set_language(&lang) {
+            eprintln!(
+                "health::reusable: set_language({}) failed for {rel_path}: {e}",
+                src.ext
+            );
             continue;
         }
         let tree = match parser.parse(&content, None) {

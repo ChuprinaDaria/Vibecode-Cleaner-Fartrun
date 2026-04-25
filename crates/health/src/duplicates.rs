@@ -7,10 +7,9 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-use ignore::WalkBuilder;
 use pyo3::prelude::*;
 
-use crate::common::{is_generated_or_data_file, should_skip_entry, SOURCE_EXTENSIONS};
+use crate::common::{collect_source_files, is_test_path, WalkOpts};
 
 const MIN_DUPLICATE_LINES: usize = 10;
 const NGRAM_SIZE: usize = 10;
@@ -142,48 +141,17 @@ pub fn scan_duplicates(path: &str) -> PyResult<DuplicatesResult> {
 
     let mut files: Vec<FileInfo> = Vec::new();
 
-    let walker = WalkBuilder::new(root)
-        .hidden(false)
-        .git_ignore(true)
-        .git_global(false)
-        .git_exclude(true)
-        .filter_entry(|entry| !should_skip_entry(entry))
-        .build();
-
-    for entry in walker.flatten() {
-        let entry_path = entry.path();
-        if !entry_path.is_file() {
-            continue;
-        }
-        let ext = match entry_path.extension().and_then(|e| e.to_str()) {
-            Some(e) => e,
-            None => continue,
-        };
-        if !SOURCE_EXTENSIONS.contains(&ext) {
-            continue;
-        }
-        let rel_path = match entry_path.strip_prefix(root) {
-            Ok(r) => crate::common::normalize_path(&r.to_string_lossy()),
-            Err(_) => continue,
-        };
-
-        // Skip test files
-        if rel_path.contains("/test") || rel_path.starts_with("test") || rel_path.contains("/__tests__/") {
+    for src in collect_source_files(root, &WalkOpts::default()) {
+        if is_test_path(&src.rel_path) {
             continue;
         }
 
-        // Skip generated/mock/seed data — they're not hand-authored, so
-        // flagging them as duplicates is useless noise.
-        if is_generated_or_data_file(&rel_path) {
-            continue;
-        }
-
-        let content = match fs::read_to_string(entry_path) {
+        let content = match fs::read_to_string(&src.abs_path) {
             Ok(c) => c,
             Err(_) => continue,
         };
 
-        let lang = match ext {
+        let lang = match src.ext.as_str() {
             "py" => "python",
             "ts" | "tsx" | "mts" | "cts" => "ts",
             "js" | "jsx" | "mjs" | "cjs" => "js",
@@ -197,6 +165,7 @@ pub fn scan_duplicates(path: &str) -> PyResult<DuplicatesResult> {
             "cs" => "cs",
             _ => "js",
         };
+        let rel_path = src.rel_path;
 
         let original_lines: Vec<String> = content.lines().map(|l| l.to_string()).collect();
         let mut normalized = Vec::new();

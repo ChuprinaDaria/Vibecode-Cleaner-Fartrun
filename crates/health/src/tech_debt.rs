@@ -5,11 +5,10 @@
 use std::fs;
 use std::path::Path;
 
-use ignore::WalkBuilder;
 use pyo3::prelude::*;
 use regex::Regex;
 
-use crate::common::{is_generated_or_data_file, should_skip_entry, SOURCE_EXTENSIONS};
+use crate::common::{collect_source_files, is_test_path, WalkOpts};
 
 // --- PyO3 result structs ---
 
@@ -84,7 +83,8 @@ pub struct TechDebtResult {
 
 fn check_missing_types_python(content: &str, rel_path: &str) -> Vec<MissingType> {
     let mut parser = tree_sitter::Parser::new();
-    if parser.set_language(&tree_sitter_python::LANGUAGE.into()).is_err() {
+    if let Err(e) = parser.set_language(&tree_sitter_python::LANGUAGE.into()) {
+        eprintln!("health::tech_debt: set_language(python) failed for {rel_path}: {e}");
         return vec![];
     }
     let tree = match parser.parse(content, None) {
@@ -190,7 +190,8 @@ fn check_missing_types_python(content: &str, rel_path: &str) -> Vec<MissingType>
 
 fn check_error_gaps_python(content: &str, rel_path: &str) -> Vec<ErrorGap> {
     let mut parser = tree_sitter::Parser::new();
-    if parser.set_language(&tree_sitter_python::LANGUAGE.into()).is_err() {
+    if let Err(e) = parser.set_language(&tree_sitter_python::LANGUAGE.into()) {
+        eprintln!("health::tech_debt: set_language(python) failed for {rel_path}: {e}");
         return vec![];
     }
     let tree = match parser.parse(content, None) {
@@ -257,7 +258,11 @@ fn check_error_gaps_js(content: &str, rel_path: &str, is_ts: bool) -> Vec<ErrorG
     } else {
         tree_sitter_javascript::LANGUAGE.into()
     };
-    if parser.set_language(&lang).is_err() {
+    if let Err(e) = parser.set_language(&lang) {
+        eprintln!(
+            "health::tech_debt: set_language({}) failed for {rel_path}: {e}",
+            if is_ts { "ts" } else { "js" }
+        );
         return vec![];
     }
     let tree = match parser.parse(content, None) {
@@ -462,61 +467,30 @@ pub fn scan_tech_debt(path: &str) -> PyResult<TechDebtResult> {
     let mut hardcoded = Vec::new();
     let mut todos = Vec::new();
 
-    let walker = WalkBuilder::new(root)
-        .hidden(false)
-        .git_ignore(true)
-        .git_global(false)
-        .git_exclude(true)
-        .filter_entry(|entry| !should_skip_entry(entry))
-        .build();
+    for src in collect_source_files(root, &WalkOpts::default()) {
+        let is_test = is_test_path(&src.rel_path);
 
-    for entry in walker.flatten() {
-        let entry_path = entry.path();
-        if !entry_path.is_file() {
-            continue;
-        }
-        let ext = match entry_path.extension().and_then(|e| e.to_str()) {
-            Some(e) => e,
-            None => continue,
-        };
-        if !SOURCE_EXTENSIONS.contains(&ext) {
-            continue;
-        }
-        let rel_path = match entry_path.strip_prefix(root) {
-            Ok(r) => crate::common::normalize_path(&r.to_string_lossy()),
-            Err(_) => continue,
-        };
-
-        // Skip generated code, mock/seed data, vendored binaries — they're
-        // not hand-written, so tech-debt checks produce noise.
-        if is_generated_or_data_file(&rel_path) {
-            continue;
-        }
-
-        // Skip test files for type hint and hardcoded checks
-        let is_test = rel_path.contains("/test") || rel_path.starts_with("test") || rel_path.contains("/__tests__/");
-
-        let content = match fs::read_to_string(entry_path) {
+        let content = match fs::read_to_string(&src.abs_path) {
             Ok(c) => c,
             Err(_) => continue,
         };
 
-        if ext == "py" {
+        if src.ext == "py" {
             if !is_test {
-                missing_types.extend(check_missing_types_python(&content, &rel_path));
+                missing_types.extend(check_missing_types_python(&content, &src.rel_path));
             }
-            error_gaps.extend(check_error_gaps_python(&content, &rel_path));
+            error_gaps.extend(check_error_gaps_python(&content, &src.rel_path));
         } else {
-            let is_ts = ext == "ts" || ext == "tsx" || ext == "mts" || ext == "cts";
-            error_gaps.extend(check_error_gaps_js(&content, &rel_path, is_ts));
+            let is_ts = matches!(src.ext.as_str(), "ts" | "tsx" | "mts" | "cts");
+            error_gaps.extend(check_error_gaps_js(&content, &src.rel_path, is_ts));
             // JS type hint check only for .js (TS already has types)
             // Skip for now — JSDoc parsing is complex, add later
         }
 
         if !is_test {
-            hardcoded.extend(check_hardcoded(&content, &rel_path));
+            hardcoded.extend(check_hardcoded(&content, &src.rel_path));
         }
-        todos.extend(check_todos(&content, &rel_path));
+        todos.extend(check_todos(&content, &src.rel_path));
     }
 
     Ok(TechDebtResult {

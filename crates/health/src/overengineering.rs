@@ -7,10 +7,9 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-use ignore::WalkBuilder;
 use pyo3::prelude::*;
 
-use crate::common::{is_generated_or_data_file, should_skip_entry, SOURCE_EXTENSIONS};
+use crate::common::{collect_source_files, is_test_path, WalkOpts};
 
 /// Return true if this file follows a framework pattern that INTENTIONALLY
 /// produces single-method classes: NestJS commands/migrations, Django/Alembic
@@ -393,35 +392,17 @@ pub fn scan_overengineering(path: &str) -> PyResult<OverengineeringResult> {
     // Track directory nesting: dir_path → file count
     let mut dir_file_counts: HashMap<String, u32> = HashMap::new();
 
-    let walker = WalkBuilder::new(root)
-        .hidden(false)
-        .git_ignore(true)
-        .git_global(false)
-        .git_exclude(true)
-        .filter_entry(|entry| !should_skip_entry(entry))
-        .build();
-
-    for entry in walker.flatten() {
-        let entry_path = entry.path();
-        if !entry_path.is_file() {
-            continue;
-        }
-
-        let ext = match entry_path.extension().and_then(|e| e.to_str()) {
-            Some(e) => e,
-            None => continue,
-        };
-        if !SOURCE_EXTENSIONS.contains(&ext) {
-            continue;
-        }
-
-        let rel_path = match entry_path.strip_prefix(root) {
-            Ok(r) => crate::common::normalize_path(&r.to_string_lossy()),
-            Err(_) => continue,
-        };
-
-        // Track dir file counts
-        if let Some(parent) = entry_path.parent() {
+    // Walk all source files (including generated/vendored) so we can count
+    // every file in dir_file_counts. Per-file analysis below applies the
+    // generated-file and test-file skips itself.
+    let opts = WalkOpts {
+        skip_generated: false,
+        ..WalkOpts::default()
+    };
+    for src in collect_source_files(root, &opts) {
+        // Track dir file counts (includes generated and test files —
+        // the original behavior).
+        if let Some(parent) = src.abs_path.parent() {
             if let Ok(rel_parent) = parent.strip_prefix(root) {
                 let dir_key = rel_parent.to_string_lossy().to_string();
                 *dir_file_counts.entry(dir_key).or_insert(0) += 1;
@@ -429,14 +410,17 @@ pub fn scan_overengineering(path: &str) -> PyResult<OverengineeringResult> {
         }
 
         // Skip test files
-        if rel_path.contains("/test") || rel_path.starts_with("test") || rel_path.contains("/__tests__/") {
+        if is_test_path(&src.rel_path) {
             continue;
         }
 
         // Skip generated/vendored files (e.g. .yarn/releases/yarn-4.x.cjs)
-        if is_generated_or_data_file(&rel_path) {
+        if crate::common::is_generated_or_data_file(&src.rel_path) {
             continue;
         }
+
+        let rel_path = src.rel_path;
+        let ext = src.ext.as_str();
 
         // Skip framework conventions where single-method classes are expected
         // (NestJS commands, Django migrations, etc.)
@@ -444,7 +428,7 @@ pub fn scan_overengineering(path: &str) -> PyResult<OverengineeringResult> {
             continue;
         }
 
-        let content = match fs::read_to_string(entry_path) {
+        let content = match fs::read_to_string(&src.abs_path) {
             Ok(c) => c,
             Err(_) => continue,
         };
