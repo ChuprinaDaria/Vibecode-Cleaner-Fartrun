@@ -44,6 +44,8 @@ fn health(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<dead_code::DeadCodeResult>()?;
     m.add_function(wrap_pyfunction!(dead_code::scan_dead_code, m)?)?;
     m.add_function(wrap_pyfunction!(dead_code::scan_dead_code_with_context, m)?)?;
+    m.add_function(wrap_pyfunction!(dead_code::parse_dead_code_file_json, m)?)?;
+    m.add_function(wrap_pyfunction!(dead_code::assemble_dead_code_from_json, m)?)?;
 
     m.add_class::<tech_debt::MissingType>()?;
     m.add_class::<tech_debt::ErrorGap>()?;

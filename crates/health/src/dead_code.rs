@@ -67,7 +67,10 @@ pub struct DeadCodeResult {
     pub commented_blocks: Vec<CommentedBlock>,
 }
 
-/// Per-file parsed data.
+/// Per-file parsed data. Used by both the in-memory full-scan path and the
+/// JSON round-trip used by the incremental orchestrator (parse once,
+/// persist, replay).
+#[derive(serde::Serialize, serde::Deserialize)]
 struct FileData {
     rel_path: String,
     lang: Lang,
@@ -80,12 +83,27 @@ struct FileData {
     is_route_file: bool,
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 enum Lang {
     Python,
     JavaScript,
     TypeScript,
     Tsx,
+}
+
+impl Lang {
+    /// Map an extension (lowercased, no dot) to a Lang. Mirrors the match
+    /// in scan_dead_code_inner so callers can hand us a path and get the
+    /// same classification.
+    fn from_ext(ext: &str) -> Option<Self> {
+        match ext {
+            "py" => Some(Lang::Python),
+            "ts" | "mts" | "cts" => Some(Lang::TypeScript),
+            "tsx" | "jsx" => Some(Lang::Tsx),
+            "js" | "mjs" | "cjs" => Some(Lang::JavaScript),
+            _ => None,
+        }
+    }
 }
 
 /// Names that pytest (and unittest-via-pytest) call automatically in any
@@ -1127,15 +1145,11 @@ fn scan_dead_code_inner(
     let mut file_data: Vec<FileData> = Vec::new();
 
     for src in collect_source_files(root, &WalkOpts::default()) {
-        let lang = match src.ext.as_str() {
-            "py" => Lang::Python,
-            "ts" | "mts" | "cts" => Lang::TypeScript,
-            "tsx" | "jsx" => Lang::Tsx,
-            "js" | "mjs" | "cjs" => Lang::JavaScript,
+        let Some(lang) = Lang::from_ext(src.ext.as_str()) else {
             // Skip languages we don't have tree-sitter analysis for yet.
             // They'll still be counted in file_tree but won't produce
             // false dead-code results.
-            _ => continue,
+            continue;
         };
         let content_holder = if let Some(ctx) = ctx {
             ctx.read_file(&src.rel_path, &src.abs_path)
@@ -1148,6 +1162,13 @@ fn scan_dead_code_inner(
         file_data.push(parse_file(content_arc.as_str(), &src.rel_path, lang, ctx));
     }
 
+    Ok(compute_dead_code_from_files(file_data))
+}
+
+/// Run phases 2-5 (cross-file analysis) over a pre-parsed list of FileData.
+/// Pulled out so the incremental orchestrator can hand us mostly-cached
+/// FileData with only the changed files freshly parsed.
+fn compute_dead_code_from_files(file_data: Vec<FileData>) -> DeadCodeResult {
     // Phase 2: Unused imports (per-file)
     let mut unused_imports: Vec<UnusedImport> = Vec::new();
     for fd in &file_data {
@@ -1276,10 +1297,58 @@ fn scan_dead_code_inner(
         commented_blocks.extend(find_commented_blocks(&fd.content, &fd.rel_path, fd.lang));
     }
 
-    Ok(DeadCodeResult {
+    DeadCodeResult {
         unused_imports,
         unused_definitions,
         orphan_files,
         commented_blocks,
-    })
+    }
+}
+
+/// Parse a single file to its serializable FileData and return a JSON
+/// payload. Used by the incremental orchestrator: parse the changed
+/// files, persist their JSON, replay against the cached set on subsequent
+/// runs.
+///
+/// `lang_str` is the lowercase extension (`"py"`, `"ts"`, `"tsx"`,
+/// `"jsx"`, `"mts"`, `"cts"`, `"js"`, `"mjs"`, `"cjs"`). Unknown values
+/// raise ValueError so callers don't silently drop files.
+#[pyfunction]
+pub fn parse_dead_code_file_json(
+    rel_path: &str,
+    content: &str,
+    lang_str: &str,
+) -> PyResult<String> {
+    let Some(lang) = Lang::from_ext(lang_str) else {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            format!("unsupported lang: {lang_str}"),
+        ));
+    };
+    let fd = parse_file(content, rel_path, lang, None);
+    serde_json::to_string(&fd)
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
+}
+
+/// Run the cross-file dead-code analysis (phases 2-5) on a pre-parsed
+/// FileData set passed as a list of JSON payloads. Returns the same
+/// DeadCodeResult shape as `scan_dead_code`.
+///
+/// Each entry must be a JSON string produced by
+/// `parse_dead_code_file_json` against a compatible schema; entries that
+/// fail to deserialize are skipped (with a warning to stderr) so a stale
+/// cache row doesn't take down the whole analysis.
+#[pyfunction]
+pub fn assemble_dead_code_from_json(
+    file_data_jsons: Vec<String>,
+) -> PyResult<DeadCodeResult> {
+    let mut file_data: Vec<FileData> = Vec::with_capacity(file_data_jsons.len());
+    for payload in file_data_jsons {
+        match serde_json::from_str::<FileData>(&payload) {
+            Ok(fd) => file_data.push(fd),
+            Err(e) => eprintln!(
+                "assemble_dead_code_from_json: skipping malformed payload: {e}"
+            ),
+        }
+    }
+    Ok(compute_dead_code_from_files(file_data))
 }
