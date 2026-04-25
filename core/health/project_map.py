@@ -8,7 +8,7 @@ from pathlib import Path
 from core.health.models import (
     ConfigFile, ConfigInventoryResult, HealthFinding, HealthReport,
 )
-from core.health import cache, tips
+from core.health import cache, delta_scan, git_delta, tips
 
 log = logging.getLogger(__name__)
 
@@ -102,6 +102,22 @@ def run_all_checks(project_dir: str, *, use_cache: bool = True) -> HealthReport:
                 project_dir, (cache.head_hash(project_dir) or "")[:8],
             )
             return cached
+
+    # Delta scan: when no exact-HEAD cache hit but we have a cached
+    # ancestor commit, re-use those per-file findings for files that did
+    # not change. `delta_context` is consumed by individual scanner blocks
+    # (currently only monsters); when None, every scanner full-runs.
+    delta_context: tuple[git_delta.DeltaPlan, HealthReport] | None = None
+    if use_cache:
+        plan = git_delta.plan_delta(project_dir)
+        if plan is not None:
+            ancestor = cache.get_at(project_dir, plan.ancestor_hash)
+            if ancestor is not None:
+                delta_context = (plan, ancestor)
+                log.info(
+                    "delta scan: %d files changed since %s",
+                    len(plan.changed), plan.ancestor_hash[:8],
+                )
 
     report = HealthReport(project_dir=project_dir)
 
@@ -214,26 +230,16 @@ def run_all_checks(project_dir: str, *, use_cache: bool = True) -> HealthReport:
         except BaseException as e:
             log.error("module_map scan error: %s", e)
 
-        # Check 1.4 — Monsters
+        # Check 1.4 — Monsters (delta-aware)
         try:
-            monsters_result = health_rs.scan_monsters(project_dir)
-            report.monsters = [
-                {
-                    "path": m.path,
-                    "lines": m.lines,
-                    "functions": m.functions,
-                    "classes": m.classes,
-                    "severity": m.severity,
-                }
-                for m in monsters_result.monsters
-            ]
-            for m in monsters_result.monsters:
-                report.findings.append(HealthFinding(
-                    check_id="map.monsters",
-                    title=f"Monster: {m.path}",
-                    severity=m.severity,
-                    message=tips.tip_monster(m.path, m.lines, m.functions),
-                ))
+            if delta_context is not None:
+                plan, ancestor = delta_context
+                delta_scan.apply_monsters_delta(
+                    report, health_rs, project_dir, plan, ancestor,
+                )
+            else:
+                monsters_result = health_rs.scan_monsters(project_dir)
+                delta_scan.append_full_monsters(report, monsters_result)
         except BaseException as e:
             log.error("monsters scan error: %s", e)
 
