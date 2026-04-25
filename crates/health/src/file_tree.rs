@@ -32,7 +32,7 @@ pub fn scan_file_tree(path: &str) -> PyResult<FileTreeResult> {
     let root = Path::new(path);
     if !root.is_dir() {
         return Err(pyo3::exceptions::PyValueError::new_err(
-            format!("Not a directory: {}", path),
+            format!("Not a directory: {path}"),
         ));
     }
 

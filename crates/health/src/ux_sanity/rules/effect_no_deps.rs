@@ -1,6 +1,6 @@
 use crate::ux_sanity::issue::Issue;
 use crate::ux_sanity::parser::{offset_to_line_col, ParsedFile};
-use oxc_ast::ast::*;
+use oxc_ast::ast::{Statement, Declaration, ExportDefaultDeclarationKind, Expression};
 
 /// useEffect(() => {...}) without second argument — re-runs on every render.
 pub fn check(parsed: &ParsedFile, file: &str) -> Vec<Issue> {

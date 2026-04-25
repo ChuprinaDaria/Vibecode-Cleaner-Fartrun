@@ -6,7 +6,7 @@ use pyo3::prelude::*;
 use sysinfo::System;
 
 /// Known suspicious process patterns.
-/// Each entry: (pattern, severity, description_template)
+/// Each entry: (pattern, severity, `description_template`)
 const SUSPICIOUS_NAMES: &[(&str, &str, &str)] = &[
     ("xmrig", "critical", "Cryptominer detected: {}"),
     ("minerd", "critical", "Cryptominer detected: {}"),
@@ -155,7 +155,7 @@ pub fn scan_processes() -> Vec<ProcessFinding> {
                 findings.push(ProcessFinding {
                     severity: severity.to_string(),
                     description: desc_template.replace("{}", &format!(
-                        "{} (PID {}, user: {})", name, pid_u32, user
+                        "{name} (PID {pid_u32}, user: {user})"
                     )),
                     pid: pid_u32,
                     name: name.clone(),
@@ -208,8 +208,7 @@ pub fn scan_processes() -> Vec<ProcessFinding> {
                     findings.push(ProcessFinding {
                         severity: severity.to_string(),
                         description: format!(
-                            "Process '{}' (PID {}) using {:.0}% CPU for {}s — {}",
-                            name, pid_u32, cpu, run_time, label
+                            "Process '{name}' (PID {pid_u32}) using {cpu:.0}% CPU for {run_time}s — {label}"
                         ),
                         pid: pid_u32,
                         name: name.clone(),
@@ -228,8 +227,7 @@ pub fn scan_processes() -> Vec<ProcessFinding> {
                 findings.push(ProcessFinding {
                     severity: "critical".to_string(),
                     description: format!(
-                        "Process '{}' (PID {}) executing from temp directory: {}",
-                        name, pid_u32, exe_str
+                        "Process '{name}' (PID {pid_u32}) executing from temp directory: {exe_str}"
                     ),
                     pid: pid_u32,
                     name: name.clone(),
@@ -255,8 +253,7 @@ pub fn scan_processes() -> Vec<ProcessFinding> {
                     findings.push(ProcessFinding {
                         severity: "high".to_string(),
                         description: format!(
-                            "Process masquerading: name '{}' doesn't match binary '{}' (PID {}, path: {})",
-                            name, binary_name, pid_u32, exe_str
+                            "Process masquerading: name '{name}' doesn't match binary '{binary_name}' (PID {pid_u32}, path: {exe_str})"
                         ),
                         pid: pid_u32,
                         name: name.clone(),
@@ -278,8 +275,7 @@ pub fn scan_processes() -> Vec<ProcessFinding> {
                     findings.push(ProcessFinding {
                         severity: "medium".to_string(),
                         description: format!(
-                            "Process '{}' (PID {}) running as unexpected user '{}' with network args",
-                            name, pid_u32, user
+                            "Process '{name}' (PID {pid_u32}) running as unexpected user '{user}' with network args"
                         ),
                         pid: pid_u32,
                         name: name.clone(),

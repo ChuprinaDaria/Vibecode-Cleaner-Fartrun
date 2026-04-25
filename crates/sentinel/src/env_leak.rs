@@ -56,9 +56,9 @@ pub fn scan_env_leaks() -> Vec<EnvLeakFinding> {
                         findings.push(EnvLeakFinding {
                             severity: "high".into(),
                             description: format!(
-                                "{} found in environment of PID {} ({})", name, pid, cmdline_short
+                                "{name} found in environment of PID {pid} ({cmdline_short})"
                             ),
-                            process: format!("pid:{}", pid),
+                            process: format!("pid:{pid}"),
                         });
                         break;
                     }

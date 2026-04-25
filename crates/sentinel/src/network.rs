@@ -146,7 +146,7 @@ fn scan_proc_net_tcp(findings: &mut Vec<NetworkFinding>, seen: &mut HashSet<Stri
             let remote = parse_hex_addr(parts[2]);
 
             let (remote_ip_str, remote_port) = match &remote {
-                Some((ip, port)) => (ip.to_string(), *port),
+                Some((ip, port)) => (ip.clone(), *port),
                 None => continue,
             };
 
@@ -161,17 +161,17 @@ fn scan_proc_net_tcp(findings: &mut Vec<NetworkFinding>, seen: &mut HashSet<Stri
             }
 
             let local_str = local
-                .map(|(ip, port)| format!("{}:{}", ip, port))
+                .map(|(ip, port)| format!("{ip}:{port}"))
                 .unwrap_or_default();
-            let remote_str = format!("{}:{}", remote_ip_str, remote_port);
+            let _remote_str = format!("{remote_ip_str}:{remote_port}");
 
-            let dedup_key = format!("{}:{}", remote_ip_str, remote_port);
+            let dedup_key = format!("{remote_ip_str}:{remote_port}");
             if seen.contains(&dedup_key) {
                 continue;
             }
 
             // Get PID from inode
-            let uid = parts.get(7).unwrap_or(&"0");
+            let _uid = parts.get(7).unwrap_or(&"0");
             let inode = parts.get(9).unwrap_or(&"0");
             let pid = find_pid_for_inode(inode).unwrap_or(0);
 
@@ -227,7 +227,7 @@ fn parse_hex_addr(s: &str) -> Option<(String, u16)> {
         let b = (ip >> 8) & 0xff;
         let c = (ip >> 16) & 0xff;
         let d = (ip >> 24) & 0xff;
-        Some((format!("{}.{}.{}.{}", a, b, c, d), port))
+        Some((format!("{a}.{b}.{c}.{d}"), port))
     } else if hex_ip.len() == 32 {
         // IPv6 — simplified
         let bytes: Vec<u8> = (0..32)
@@ -255,7 +255,7 @@ fn parse_hex_addr(s: &str) -> Option<(String, u16)> {
 /// Find PID that owns a socket inode (Linux-specific).
 #[cfg(target_os = "linux")]
 fn find_pid_for_inode(inode: &str) -> Option<u32> {
-    let target = format!("socket:[{}]", inode);
+    let target = format!("socket:[{inode}]");
     let proc_dir = match std::fs::read_dir("/proc") {
         Ok(d) => d,
         Err(_) => return None,
@@ -269,7 +269,7 @@ fn find_pid_for_inode(inode: &str) -> Option<u32> {
             Err(_) => continue,
         };
 
-        let fd_dir = format!("/proc/{}/fd", pid);
+        let fd_dir = format!("/proc/{pid}/fd");
         let fds = match std::fs::read_dir(&fd_dir) {
             Ok(d) => d,
             Err(_) => continue,
@@ -465,7 +465,7 @@ fn scan_listening_ports(findings: &mut Vec<NetworkFinding>, seen: &mut HashSet<S
             }
             if let Some((ip, port)) = parse_hex_addr(parts[1]) {
                 if ip == "0.0.0.0" {
-                    let key = format!("listen:0.0.0.0:{}", port);
+                    let key = format!("listen:0.0.0.0:{port}");
                     if seen.contains(&key) {
                         continue;
                     }
@@ -475,10 +475,9 @@ fn scan_listening_ports(findings: &mut Vec<NetworkFinding>, seen: &mut HashSet<S
                             findings.push(NetworkFinding {
                                 severity: "high".to_string(),
                                 description: format!(
-                                    "{} (port {}) listening on 0.0.0.0 — accessible from network, should be localhost",
-                                    service, port
+                                    "{service} (port {port}) listening on 0.0.0.0 — accessible from network, should be localhost"
                                 ),
-                                local_addr: format!("0.0.0.0:{}", port),
+                                local_addr: format!("0.0.0.0:{port}"),
                                 remote_addr: String::new(),
                                 remote_port: 0,
                                 pid: 0,

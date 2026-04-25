@@ -107,8 +107,7 @@ fn check_hooks(hooks_dir: &Path, findings: &mut Vec<GitHookFinding>, project_dir
             findings.push(GitHookFinding {
                 severity: "critical".into(),
                 description: format!(
-                    "Git hook '{}' in '{}' downloads and executes code — potential backdoor",
-                    name, project
+                    "Git hook '{name}' in '{project}' downloads and executes code — potential backdoor"
                 ),
                 path: path_str,
             });

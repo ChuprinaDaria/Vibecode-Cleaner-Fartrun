@@ -385,7 +385,7 @@ fn check_hardcoded(content: &str, rel_path: &str) -> Vec<HardcodedValue> {
                     results.push(HardcodedValue {
                         path: rel_path.to_string(),
                         line: line_num,
-                        value: format!("sleep({})", val),
+                        value: format!("sleep({val})"),
                         kind: "sleep".to_string(),
                     });
                 }
@@ -399,7 +399,7 @@ fn check_hardcoded(content: &str, rel_path: &str) -> Vec<HardcodedValue> {
                     results.push(HardcodedValue {
                         path: rel_path.to_string(),
                         line: line_num,
-                        value: format!("setTimeout(..., {})", val),
+                        value: format!("setTimeout(..., {val})"),
                         kind: "timeout".to_string(),
                     });
                 }
@@ -458,7 +458,7 @@ pub fn scan_tech_debt(path: &str) -> PyResult<TechDebtResult> {
     let root = Path::new(path);
     if !root.is_dir() {
         return Err(pyo3::exceptions::PyValueError::new_err(
-            format!("Not a directory: {}", path),
+            format!("Not a directory: {path}"),
         ));
     }
 

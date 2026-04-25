@@ -1,4 +1,4 @@
-//! Container escape detection — /.dockerenv, namespace leaks, CAP_SYS_ADMIN.
+//! Container escape detection — /.dockerenv, namespace leaks, `CAP_SYS_ADMIN`.
 
 use pyo3::prelude::*;
 
@@ -22,7 +22,36 @@ pub fn scan_container_escape() -> Vec<ContainerEscapeFinding> {
             .map(|s| s.contains("docker") || s.contains("containerd") || s.contains("kubepods"))
             .unwrap_or(false);
 
-    if !in_container {
+    if in_container {
+        // Inside container — check for escape possibilities
+        findings.push(ContainerEscapeFinding {
+            severity: "info".into(),
+            description: "Running inside a container — limited host visibility".into(),
+            evidence: "/.dockerenv exists".into(),
+        });
+
+        if std::path::Path::new("/var/run/docker.sock").exists() {
+            findings.push(ContainerEscapeFinding {
+                severity: "critical".into(),
+                description: "Docker socket accessible inside container — full host escape possible".into(),
+                evidence: "/var/run/docker.sock".into(),
+            });
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            use std::os::unix::fs::MetadataExt;
+            if let Ok(meta) = std::fs::metadata("/proc/sysrq-trigger") {
+                if meta.mode() & 0o222 != 0 {
+                    findings.push(ContainerEscapeFinding {
+                        severity: "high".into(),
+                        description: "sysrq-trigger writable — can crash host from container".into(),
+                        evidence: "/proc/sysrq-trigger".into(),
+                    });
+                }
+            }
+        }
+    } else {
         // Host-side: check for containers with CAP_SYS_ADMIN
         #[cfg(target_os = "linux")]
         {
@@ -49,7 +78,7 @@ pub fn scan_container_escape() -> Vec<ContainerEscapeFinding> {
                                                             "Container process PID {} has CAP_SYS_ADMIN — potential escape vector: {}",
                                                             pid, &cmdline[..cmdline.len().min(100)]
                                                         ),
-                                                        evidence: format!("pid:{} caps:{:#x}", pid, caps),
+                                                        evidence: format!("pid:{pid} caps:{caps:#x}"),
                                                     });
                                                 }
                                             }
@@ -59,35 +88,6 @@ pub fn scan_container_escape() -> Vec<ContainerEscapeFinding> {
                             }
                         }
                     }
-                }
-            }
-        }
-    } else {
-        // Inside container — check for escape possibilities
-        findings.push(ContainerEscapeFinding {
-            severity: "info".into(),
-            description: "Running inside a container — limited host visibility".into(),
-            evidence: "/.dockerenv exists".into(),
-        });
-
-        if std::path::Path::new("/var/run/docker.sock").exists() {
-            findings.push(ContainerEscapeFinding {
-                severity: "critical".into(),
-                description: "Docker socket accessible inside container — full host escape possible".into(),
-                evidence: "/var/run/docker.sock".into(),
-            });
-        }
-
-        #[cfg(target_os = "linux")]
-        {
-            use std::os::unix::fs::MetadataExt;
-            if let Ok(meta) = std::fs::metadata("/proc/sysrq-trigger") {
-                if meta.mode() & 0o222 != 0 {
-                    findings.push(ContainerEscapeFinding {
-                        severity: "high".into(),
-                        description: "sysrq-trigger writable — can crash host from container".into(),
-                        evidence: "/proc/sysrq-trigger".into(),
-                    });
                 }
             }
         }

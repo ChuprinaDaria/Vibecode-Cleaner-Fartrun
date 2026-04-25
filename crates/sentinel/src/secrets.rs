@@ -42,7 +42,7 @@ const FP_PLACEHOLDERS: &[&str] = &[
     "111111111111",
 ];
 
-/// Each pattern: (name, regex_str)
+/// Each pattern: (name, `regex_str`)
 /// All findings are "critical" severity as required.
 static PATTERNS: &[(&str, &str)] = &[
     // AWS access keys
@@ -154,7 +154,7 @@ impl SecretFinding {
     }
 }
 
-/// Scan files in scan_paths for hardcoded secrets.
+/// Scan files in `scan_paths` for hardcoded secrets.
 /// Defaults to current directory if no paths given.
 #[pyfunction]
 #[pyo3(signature = (scan_paths=None))]
@@ -318,8 +318,7 @@ fn scan_file(path: &Path, patterns: &[CompiledPattern]) -> Option<Vec<SecretFind
                 // Get the captured group (group 1 if exists, else full match).
                 let matched_value = cap.get(1)
                     .or_else(|| cap.get(0))
-                    .map(|m| m.as_str())
-                    .unwrap_or("");
+                    .map_or("", |m| m.as_str());
 
                 if matched_value.is_empty() {
                     continue;

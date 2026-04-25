@@ -10,7 +10,7 @@ use walkdir::WalkDir;
 pub fn scan_directory(root: &Path) -> Vec<Issue> {
     let mut all = Vec::new();
 
-    for entry in WalkDir::new(root).into_iter().filter_map(|e| e.ok()) {
+    for entry in WalkDir::new(root).into_iter().filter_map(std::result::Result::ok) {
         let path = entry.path();
         if !path.is_file() {
             continue;

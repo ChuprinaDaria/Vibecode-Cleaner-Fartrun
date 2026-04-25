@@ -12,7 +12,7 @@ use pyo3::prelude::*;
 use crate::common::{collect_source_files, is_test_path, WalkOpts};
 
 /// Return true if this file follows a framework pattern that INTENTIONALLY
-/// produces single-method classes: NestJS commands/migrations, Django/Alembic
+/// produces single-method classes: `NestJS` commands/migrations, Django/Alembic
 /// migrations, Celery tasks, etc. Flagging these as "overengineered" is noise.
 fn is_framework_single_method_file(rel_path: &str) -> bool {
     let p = rel_path.replace('\\', "/");
@@ -31,7 +31,7 @@ fn is_framework_single_method_file(rel_path: &str) -> bool {
     let stem = basename
         .rsplit('.')
         .nth(1)
-        .or_else(|| Some(basename))
+        .or(Some(basename))
         .unwrap_or(basename);
     // Filename conventions — frameworks that expect single-method classes.
     // Match BOTH `foo.guard.ts` (dot-separated) and `foo-guard.ts` (dash-separated).
@@ -41,13 +41,13 @@ fn is_framework_single_method_file(rel_path: &str) -> bool {
     ];
     for suf in &nest_suffixes {
         // foo.guard.ts
-        if basename.ends_with(&format!(".{}.ts", suf))
-            || basename.ends_with(&format!(".{}.js", suf))
+        if basename.ends_with(&format!(".{suf}.ts"))
+            || basename.ends_with(&format!(".{suf}.js"))
         {
             return true;
         }
         // foo-guard.ts
-        if stem.ends_with(&format!("-{}", suf)) {
+        if stem.ends_with(&format!("-{suf}")) {
             return true;
         }
     }
@@ -78,10 +78,10 @@ pub struct OverengineeringResult {
 }
 
 /// Base classes whose subclasses legitimately have few methods.
-/// QThread: __init__ + run() is the standard pattern.
+/// `QThread`: __init__ + `run()` is the standard pattern.
 /// QDialog/QWidget: __init__ sets up UI, may have 1 accessor.
-/// Thread: same as QThread.
-/// Command (management commands, Click): __init__ + handle()/invoke().
+/// Thread: same as `QThread`.
+/// Command (management commands, Click): __init__ + `handle()/invoke()`.
 const FRAMEWORK_BASE_CLASSES: &[&str] = &[
     // Qt
     "QThread",
@@ -136,12 +136,12 @@ const FRAMEWORK_BASE_CLASSES: &[&str] = &[
     "BaseModel",
 ];
 
-/// Extract base class names from a Python class_definition node.
+/// Extract base class names from a Python `class_definition` node.
 ///
 /// In tree-sitter-python the base-class list has field name "superclasses"
-/// and node kind "argument_list". We look it up by field name first; if that
+/// and node kind "`argument_list`". We look it up by field name first; if that
 /// fails (older grammar versions) we fall back to scanning children for an
-/// "argument_list" node.
+/// "`argument_list`" node.
 fn extract_base_classes(node: tree_sitter::Node, content: &str) -> Vec<String> {
     let mut bases = Vec::new();
 
@@ -247,8 +247,7 @@ fn check_single_method_classes_python(
                         line,
                         kind: "single_method_class".to_string(),
                         description: format!(
-                            "class {} has only 1 method. Maybe just a function?",
-                            class_name
+                            "class {class_name} has only 1 method. Maybe just a function?"
                         ),
                     });
                 }
@@ -366,8 +365,7 @@ fn check_single_method_classes_js(
                         line,
                         kind: "single_method_class".to_string(),
                         description: format!(
-                            "class {} has only 1 method. Maybe just a function?",
-                            class_name
+                            "class {class_name} has only 1 method. Maybe just a function?"
                         ),
                     });
                 }
@@ -383,7 +381,7 @@ pub fn scan_overengineering(path: &str) -> PyResult<OverengineeringResult> {
     let root = Path::new(path);
     if !root.is_dir() {
         return Err(pyo3::exceptions::PyValueError::new_err(
-            format!("Not a directory: {}", path),
+            format!("Not a directory: {path}"),
         ));
     }
 
@@ -467,8 +465,7 @@ pub fn scan_overengineering(path: &str) -> PyResult<OverengineeringResult> {
                     line: 1,
                     kind: "tiny_file".to_string(),
                     description: format!(
-                        "{} — {} lines, 1 function. Maybe inline it where it's used?",
-                        rel_path, non_empty_lines
+                        "{rel_path} — {non_empty_lines} lines, 1 function. Maybe inline it where it's used?"
                     ),
                 });
             }
@@ -516,8 +513,7 @@ pub fn scan_overengineering(path: &str) -> PyResult<OverengineeringResult> {
             line: 0,
             kind: "deep_nesting".to_string(),
             description: format!(
-                "{} — {} levels deep with 1 file each. Flatten the structure.",
-                dir, depth
+                "{dir} — {depth} levels deep with 1 file each. Flatten the structure."
             ),
         });
     }

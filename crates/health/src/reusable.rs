@@ -61,7 +61,7 @@ fn extract_jsx_pattern(node: tree_sitter::Node, source: &str) -> Option<String> 
     // reusable. `<Section>` used 300 times isn't repetition to extract,
     // it's the extracted component being used. We only want to flag raw
     // HTML patterns like `<div class='card'>` that deserve extraction.
-    if tag.chars().next().map(|c| c.is_ascii_uppercase()).unwrap_or(false) {
+    if tag.chars().next().is_some_and(|c| c.is_ascii_uppercase()) {
         return None;
     }
 
@@ -127,9 +127,9 @@ fn extract_jsx_pattern(node: tree_sitter::Node, source: &str) -> Option<String> 
         {
             return None;
         }
-        Some(format!("<{}>", tag))
+        Some(format!("<{tag}>"))
     } else {
-        Some(format!("<{} class='{}'>", tag, class_name))
+        Some(format!("<{tag} class='{class_name}'>"))
     }
 }
 
@@ -138,7 +138,7 @@ pub fn scan_reusable(path: &str) -> PyResult<ReusableResult> {
     let root = Path::new(path);
     if !root.is_dir() {
         return Err(pyo3::exceptions::PyValueError::new_err(
-            format!("Not a directory: {}", path),
+            format!("Not a directory: {path}"),
         ));
     }
 
@@ -192,7 +192,7 @@ pub fn scan_reusable(path: &str) -> PyResult<ReusableResult> {
                         .join(" ");
                     let short_preview = if preview.chars().count() > 80 {
                         let truncated: String = preview.chars().take(77).collect();
-                        format!("{}...", truncated)
+                        format!("{truncated}...")
                     } else {
                         preview
                     };

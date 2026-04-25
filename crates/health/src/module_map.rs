@@ -129,7 +129,7 @@ fn collect_imports_recursive(
             if node.kind() == "import_from_statement" {
                 let module_text = node
                     .child_by_field_name("module_name")
-                    .and_then(|n| n.utf8_text(source.as_bytes()).ok().map(|s| s.to_string()));
+                    .and_then(|n| n.utf8_text(source.as_bytes()).ok().map(std::string::ToString::to_string));
 
                 let mut names: Vec<String> = Vec::new();
                 let mut has_star = false;
@@ -164,7 +164,7 @@ fn collect_imports_recursive(
                         let joiner = if module.ends_with('.') { "" } else { "." };
                         for n in names {
                             imports.push(ImportEntry {
-                                module: format!("{}{}{}", module, joiner, n),
+                                module: format!("{module}{joiner}{n}"),
                                 is_top_level: top_level,
                             });
                         }
@@ -179,7 +179,7 @@ fn collect_imports_recursive(
                                     } else {
                                         for n in &names {
                                             imports.push(ImportEntry {
-                                                module: format!("{}.{}", t, n),
+                                                module: format!("{t}.{n}"),
                                                 is_top_level: top_level,
                                             });
                                         }
@@ -399,13 +399,13 @@ fn resolve_python_import(
     for base in &bases {
         for take in (1..=parts.len()).rev() {
             let prefix = parts[..take].join("/");
-            let file_path = base.join(format!("{}.py", prefix));
+            let file_path = base.join(format!("{prefix}.py"));
             if let Some(rel) = try_rel(&file_path, root) {
                 if all_files.contains(&rel) {
                     return Some(rel);
                 }
             }
-            let init_path = base.join(format!("{}/__init__.py", prefix));
+            let init_path = base.join(format!("{prefix}/__init__.py"));
             if let Some(rel) = try_rel(&init_path, root) {
                 if all_files.contains(&rel) {
                     return Some(rel);
@@ -483,11 +483,11 @@ fn resolve_js_path(target: &Path, root: &Path, all_files: &HashSet<String>) -> O
         return Some(rel);
     }
     for ext in &["js", "ts", "jsx", "tsx", "mjs", "mts"] {
-        let with_ext = format!("{}.{}", rel, ext);
+        let with_ext = format!("{rel}.{ext}");
         if all_files.contains(&with_ext) {
             return Some(with_ext);
         }
-        let index = format!("{}/index.{}", rel, ext);
+        let index = format!("{rel}/index.{ext}");
         if all_files.contains(&index) {
             return Some(index);
         }
@@ -529,7 +529,7 @@ pub fn scan_module_map(path: &str, entry_point_paths: Vec<String>) -> PyResult<M
     let root = Path::new(path);
     if !root.is_dir() {
         return Err(pyo3::exceptions::PyValueError::new_err(
-            format!("Not a directory: {}", path),
+            format!("Not a directory: {path}"),
         ));
     }
 
@@ -554,7 +554,7 @@ pub fn scan_module_map(path: &str, entry_point_paths: Vec<String>) -> PyResult<M
         .iter()
         .filter_map(|f| f.split('/').next())
         .filter(|s| !s.is_empty() && !s.ends_with(".py") && !s.contains('.'))
-        .map(|s| s.to_string())
+        .map(std::string::ToString::to_string)
         .collect();
     // src/ layout: `src/foo/bar.py` means `foo` is also a package root.
     // Same for `packages/foo/...` monorepo layout.
@@ -701,7 +701,7 @@ pub fn scan_module_map(path: &str, entry_point_paths: Vec<String>) -> PyResult<M
     }
 
     // Orphan candidates
-    let entry_set: HashSet<&str> = entry_point_paths.iter().map(|s| s.as_str()).collect();
+    let entry_set: HashSet<&str> = entry_point_paths.iter().map(std::string::String::as_str).collect();
 
     // Build a set of files whose parent __init__.py imports them (re-exports).
     // If `gui/app/__init__.py` imports `gui/app/styles.py`, styles is not orphan.

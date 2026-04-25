@@ -1,6 +1,6 @@
 use crate::ux_sanity::issue::Issue;
 use crate::ux_sanity::parser::{offset_to_line_col, ParsedFile};
-use oxc_ast::ast::*;
+use oxc_ast::ast::{Statement, Declaration, ExportDefaultDeclarationKind, Expression, JSXChild, JSXElement, JSXAttributeItem, JSXAttributeName, JSXAttributeValue};
 
 /// onClick={async () => { await fetch(...) }} without try/catch.
 pub fn check(parsed: &ParsedFile, file: &str) -> Vec<Issue> {
@@ -171,14 +171,14 @@ fn stmt_contains_await(stmt: &Statement) -> bool {
     match stmt {
         Statement::ExpressionStatement(es) => expr_contains_await(&es.expression),
         Statement::VariableDeclaration(vd) => vd.declarations.iter().any(|d| {
-            d.init.as_ref().map_or(false, |e| expr_contains_await(e))
+            d.init.as_ref().is_some_and(|e| expr_contains_await(e))
         }),
         Statement::ReturnStatement(rs) => {
-            rs.argument.as_ref().map_or(false, |e| expr_contains_await(e))
+            rs.argument.as_ref().is_some_and(|e| expr_contains_await(e))
         }
         Statement::IfStatement(is) => {
             stmt_contains_await(&is.consequent)
-                || is.alternate.as_ref().map_or(false, |a| stmt_contains_await(a))
+                || is.alternate.as_ref().is_some_and(|a| stmt_contains_await(a))
         }
         Statement::BlockStatement(bs) => bs.body.iter().any(stmt_contains_await),
         _ => false,

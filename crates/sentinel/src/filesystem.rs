@@ -86,7 +86,7 @@ impl FileFinding {
     }
 }
 
-/// Scan filesystem — single pass over scan_paths.
+/// Scan filesystem — single pass over `scan_paths`.
 /// Checks permissions, malware paths, SUID bits, suspicious executables.
 #[pyfunction]
 #[pyo3(signature = (scan_paths=None))]
@@ -243,8 +243,7 @@ fn scan_malware_paths(findings: &mut Vec<FileFinding>, _now: &SystemTime) {
                     findings.push(FileFinding {
                         severity: "high".to_string(),
                         description: format!(
-                            "Hidden file/directory in {}: {} — common malware persistence",
-                            dir, name_str
+                            "Hidden file/directory in {dir}: {name_str} — common malware persistence"
                         ),
                         path: path.to_string_lossy().to_string(),
                         finding_type: "malware_path".to_string(),
@@ -344,8 +343,7 @@ fn scan_temp_executables(findings: &mut Vec<FileFinding>, now: &SystemTime) {
                         .or(meta.modified())
                         .ok()
                         .and_then(|t| now.duration_since(t).ok())
-                        .map(|d| d < one_day)
-                        .unwrap_or(false);
+                        .is_some_and(|d| d < one_day);
 
                     if is_recent {
                         let name = entry.file_name();
@@ -359,8 +357,7 @@ fn scan_temp_executables(findings: &mut Vec<FileFinding>, now: &SystemTime) {
                         findings.push(FileFinding {
                             severity: "high".to_string(),
                             description: format!(
-                                "Recently created executable in {}: {} — verify origin",
-                                dir, name_str
+                                "Recently created executable in {dir}: {name_str} — verify origin"
                             ),
                             path: path.to_string_lossy().to_string(),
                             finding_type: "suspicious_exec".to_string(),
@@ -375,9 +372,7 @@ fn scan_temp_executables(findings: &mut Vec<FileFinding>, now: &SystemTime) {
 fn dirs_home() -> PathBuf {
     #[cfg(unix)]
     {
-        std::env::var("HOME")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from("/root"))
+        std::env::var("HOME").map_or_else(|_| PathBuf::from("/root"), PathBuf::from)
     }
     #[cfg(windows)]
     {

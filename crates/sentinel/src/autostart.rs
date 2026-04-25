@@ -1,5 +1,5 @@
 //! Autostart persistence scanner — shell RC files, systemd user services,
-//! XDG autostart entries, and macOS LaunchAgents.
+//! XDG autostart entries, and macOS `LaunchAgents`.
 //!
 //! Looks for: pipe-to-shell, base64 decode, reverse shells, crypto miners,
 //! suspicious PATH modifications, and recently created persistence entries.
@@ -63,7 +63,7 @@ impl AutostartFinding {
     }
 }
 
-/// Scan shell RC files, systemd user services, XDG autostart and LaunchAgents
+/// Scan shell RC files, systemd user services, XDG autostart and `LaunchAgents`
 /// for suspicious persistence mechanisms.
 #[pyfunction]
 pub fn scan_autostart() -> Vec<AutostartFinding> {
@@ -107,7 +107,7 @@ fn shell_rc_paths() -> Vec<std::path::PathBuf> {
 
     names
         .iter()
-        .map(|n| std::path::PathBuf::from(format!("{}/{}", home, n)))
+        .map(|n| std::path::PathBuf::from(format!("{home}/{n}")))
         .collect()
 }
 
@@ -169,7 +169,7 @@ fn scan_systemd_user_services(findings: &mut Vec<AutostartFinding>) {
         Err(_) => return,
     };
 
-    let dir = format!("{}/.config/systemd/user", home);
+    let dir = format!("{home}/.config/systemd/user");
     let entries = match std::fs::read_dir(&dir) {
         Ok(e) => e,
         Err(_) => return,
@@ -177,7 +177,7 @@ fn scan_systemd_user_services(findings: &mut Vec<AutostartFinding>) {
 
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.extension().map(|e| e != "service").unwrap_or(true) {
+        if path.extension().is_none_or(|e| e != "service") {
             continue;
         }
 
@@ -222,7 +222,7 @@ fn scan_systemd_user_services(findings: &mut Vec<AutostartFinding>) {
 
             // Flag ExecStart from temp dirs
             for dir in &["/tmp", "/dev/shm", "/var/tmp"] {
-                if cmd_lower.starts_with(dir) || cmd_lower.contains(&format!(" {}", dir)) {
+                if cmd_lower.starts_with(dir) || cmd_lower.contains(&format!(" {dir}")) {
                     findings.push(AutostartFinding {
                         severity: "critical".to_string(),
                         description: format!(
@@ -257,8 +257,8 @@ fn scan_xdg_autostart(findings: &mut Vec<AutostartFinding>) {
     };
 
     let dirs = [
-        format!("{}/.config/autostart", home),
-        format!("{}/.local/share/applications", home),
+        format!("{home}/.config/autostart"),
+        format!("{home}/.local/share/applications"),
     ];
 
     for dir in &dirs {
@@ -269,7 +269,7 @@ fn scan_xdg_autostart(findings: &mut Vec<AutostartFinding>) {
 
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.extension().map(|e| e != "desktop").unwrap_or(true) {
+            if path.extension().is_none_or(|e| e != "desktop") {
                 continue;
             }
 
@@ -328,7 +328,7 @@ fn scan_xdg_autostart(findings: &mut Vec<AutostartFinding>) {
 
             // Hidden=true + NoDisplay=true combo — classic hiding technique
             if hidden && no_display {
-                let line_number = exec_line.as_ref().map(|(_, ln)| *ln).unwrap_or(0);
+                let line_number = exec_line.as_ref().map_or(0, |(_, ln)| *ln);
                 findings.push(AutostartFinding {
                     severity: "high".to_string(),
                     description: format!(

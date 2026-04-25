@@ -109,7 +109,7 @@ pub fn scan_monsters(path: &str) -> PyResult<MonstersResult> {
     let root = Path::new(path);
     if !root.is_dir() {
         return Err(pyo3::exceptions::PyValueError::new_err(
-            format!("Not a directory: {}", path),
+            format!("Not a directory: {path}"),
         ));
     }
 

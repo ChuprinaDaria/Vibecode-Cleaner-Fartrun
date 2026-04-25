@@ -1,9 +1,9 @@
 use crate::ux_sanity::issue::Issue;
 use crate::ux_sanity::parser::{offset_to_line_col, ParsedFile};
-use oxc_ast::ast::*;
+use oxc_ast::ast::{Statement, BindingPattern, Expression, Declaration, ExportDefaultDeclarationKind};
 use std::collections::HashSet;
 
-/// Finds setState() calls directly in component body (not in handler/effect).
+/// Finds `setState()` calls directly in component body (not in handler/effect).
 pub fn check(parsed: &ParsedFile, file: &str) -> Vec<Issue> {
     let mut issues = Vec::new();
 
@@ -95,7 +95,7 @@ fn scan_top_level(stmt: &Statement, source: &str, file: &str, issues: &mut Vec<I
 }
 
 fn is_component_name(name: Option<&str>) -> bool {
-    name.and_then(|n| n.chars().next()).map_or(false, |c| c.is_ascii_uppercase())
+    name.and_then(|n| n.chars().next()).is_some_and(|c| c.is_ascii_uppercase())
 }
 
 fn analyze_component_body(stmts: &[Statement], source: &str, file: &str, issues: &mut Vec<Issue>) {

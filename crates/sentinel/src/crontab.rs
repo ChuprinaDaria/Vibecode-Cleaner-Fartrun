@@ -4,7 +4,6 @@
 //! unknown scripts running as root.
 
 use pyo3::prelude::*;
-use std::path::PathBuf;
 
 /// Suspicious patterns in scheduled task commands.
 const SUSPICIOUS_CMD_PATTERNS: &[(&str, &str, &str)] = &[
@@ -187,10 +186,9 @@ fn scan_systemd_timers(findings: &mut Vec<CronFinding>) {
         if let Some(content) = service_content {
             for line in content.lines() {
                 let line = line.trim();
-                if line.starts_with("ExecStart=") {
-                    let cmd = &line["ExecStart=".len()..];
+                if let Some(cmd) = line.strip_prefix("ExecStart=") {
                     let cmd_lower = cmd.to_lowercase();
-                    let schedule = format!("timer:{}", unit);
+                    let schedule = format!("timer:{unit}");
                     check_suspicious_command(&cmd_lower, cmd, &schedule, "systemd-timer", findings);
                 }
             }
@@ -201,13 +199,13 @@ fn scan_systemd_timers(findings: &mut Vec<CronFinding>) {
 #[cfg(target_os = "linux")]
 fn try_read_service(name: &str) -> Option<String> {
     let paths = [
-        format!("/etc/systemd/system/{}", name),
-        format!("/usr/lib/systemd/system/{}", name),
-        format!("/lib/systemd/system/{}", name),
+        format!("/etc/systemd/system/{name}"),
+        format!("/usr/lib/systemd/system/{name}"),
+        format!("/lib/systemd/system/{name}"),
     ];
     // Also check user services
     let home = std::env::var("HOME").unwrap_or_default();
-    let user_path = format!("{}/.config/systemd/user/{}", home, name);
+    let user_path = format!("{home}/.config/systemd/user/{name}");
 
     for path in paths.iter().chain(std::iter::once(&user_path)) {
         if let Ok(content) = std::fs::read_to_string(path) {

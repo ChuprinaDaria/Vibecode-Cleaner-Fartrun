@@ -80,7 +80,7 @@ fn check_js_lock(path: &Path, findings: &mut Vec<SupplyChainFinding>) {
             findings.push(SupplyChainFinding {
                 severity: "high".into(),
                 description: format!(
-                    "Lock file contains suspicious URL '{}' — possible dependency hijack", url_pattern
+                    "Lock file contains suspicious URL '{url_pattern}' — possible dependency hijack"
                 ),
                 path: path_str.clone(),
             });
@@ -91,7 +91,7 @@ fn check_js_lock(path: &Path, findings: &mut Vec<SupplyChainFinding>) {
             findings.push(SupplyChainFinding {
                 severity: "critical".into(),
                 description: format!(
-                    "Lock file references suspicious command '{}' — possible supply chain attack", pattern
+                    "Lock file references suspicious command '{pattern}' — possible supply chain attack"
                 ),
                 path: path_str.clone(),
             });
@@ -118,7 +118,7 @@ fn check_python_lock(path: &Path, findings: &mut Vec<SupplyChainFinding>) {
             findings.push(SupplyChainFinding {
                 severity: "high".into(),
                 description: format!(
-                    "Python lock file contains suspicious URL '{}' — check dependency sources", url_pattern
+                    "Python lock file contains suspicious URL '{url_pattern}' — check dependency sources"
                 ),
                 path: path_str.clone(),
             });

@@ -49,7 +49,7 @@ pub fn scan_entry_points(path: &str) -> PyResult<EntryPointsResult> {
     let root = Path::new(path);
     if !root.is_dir() {
         return Err(pyo3::exceptions::PyValueError::new_err(
-            format!("Not a directory: {}", path),
+            format!("Not a directory: {path}"),
         ));
     }
 
@@ -65,7 +65,7 @@ pub fn scan_entry_points(path: &str) -> PyResult<EntryPointsResult> {
                 scripts_found.push(main_field);
             }
             for script_name in &["start", "dev", "serve"] {
-                if content.contains(&format!("\"{}\"", script_name)) {
+                if content.contains(&format!("\"{script_name}\"")) {
                     scripts_found.push(script_name.to_string());
                 }
             }
@@ -76,7 +76,7 @@ pub fn scan_entry_points(path: &str) -> PyResult<EntryPointsResult> {
                     entries.push(EntryPoint {
                         path: rel,
                         kind: "package_json".to_string(),
-                        description: format!("Node.js project config (scripts: {})", desc),
+                        description: format!("Node.js project config (scripts: {desc})"),
                     });
                 }
             }
@@ -171,11 +171,11 @@ pub fn scan_entry_points(path: &str) -> PyResult<EntryPointsResult> {
                     kind: "python_main_guard".to_string(),
                     description: "Python script with __main__ guard".to_string(),
                 });
-            } else if ["js", "ts", "mjs", "mts"].contains(&ext) {
-                if content.contains("createServer")
+            } else if ["js", "ts", "mjs", "mts"].contains(&ext)
+                && (content.contains("createServer")
                     || content.contains(".listen(")
                     || content.contains("createApp")
-                    || content.contains("express()")
+                    || content.contains("express()"))
                 {
                     seen.insert(rel_path.clone());
                     entries.push(EntryPoint {
@@ -184,7 +184,6 @@ pub fn scan_entry_points(path: &str) -> PyResult<EntryPointsResult> {
                         description: "Server/app creation detected".to_string(),
                     });
                 }
-            }
         }
     }
 
@@ -193,7 +192,7 @@ pub fn scan_entry_points(path: &str) -> PyResult<EntryPointsResult> {
 
 /// Extract a string value for a top-level key from JSON (simple, no serde needed).
 fn extract_json_string(json: &str, key: &str) -> Option<String> {
-    let pattern = format!("\"{}\"", key);
+    let pattern = format!("\"{key}\"");
     let pos = json.find(&pattern)?;
     let after = &json[pos + pattern.len()..];
     let after = after.trim_start();

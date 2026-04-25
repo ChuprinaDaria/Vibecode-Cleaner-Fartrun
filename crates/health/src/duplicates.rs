@@ -94,14 +94,14 @@ fn normalize_line(line: &str, lang: &str) -> Option<String> {
 fn hash_str(s: &str) -> u64 {
     let mut h: u64 = 0xcbf29ce484222325;
     for b in s.bytes() {
-        h ^= b as u64;
+        h ^= u64::from(b);
         h = h.wrapping_mul(0x100000001b3);
     }
     h
 }
 
 /// Build N-gram hashes for normalized lines of a file.
-/// Returns vec of (ngram_hash, start_line_in_original).
+/// Returns vec of (`ngram_hash`, `start_line_in_original`).
 fn build_ngrams(
     lines: &[(usize, String)], // (original_line_number, normalized_content)
 ) -> Vec<(u64, usize)> {
@@ -128,7 +128,7 @@ pub fn scan_duplicates(path: &str) -> PyResult<DuplicatesResult> {
     let root = Path::new(path);
     if !root.is_dir() {
         return Err(pyo3::exceptions::PyValueError::new_err(
-            format!("Not a directory: {}", path),
+            format!("Not a directory: {path}"),
         ));
     }
 
@@ -167,7 +167,7 @@ pub fn scan_duplicates(path: &str) -> PyResult<DuplicatesResult> {
         };
         let rel_path = src.rel_path;
 
-        let original_lines: Vec<String> = content.lines().map(|l| l.to_string()).collect();
+        let original_lines: Vec<String> = content.lines().map(std::string::ToString::to_string).collect();
         let mut normalized = Vec::new();
         for (idx, line) in original_lines.iter().enumerate() {
             if let Some(norm) = normalize_line(line, lang) {
@@ -260,7 +260,7 @@ pub fn scan_duplicates(path: &str) -> PyResult<DuplicatesResult> {
                     .iter()
                     .skip(line_a.saturating_sub(1))
                     .take(3)
-                    .map(|l| l.as_str())
+                    .map(std::string::String::as_str)
                     .collect::<Vec<_>>()
                     .join("\n");
 

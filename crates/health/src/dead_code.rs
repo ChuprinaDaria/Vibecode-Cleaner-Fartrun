@@ -403,7 +403,7 @@ const ROUTE_SEGMENTS: &[&str] = &["app/", "pages/", "routes/"];
 
 fn is_route_path(rel_path: &str) -> bool {
     ROUTE_SEGMENTS.iter().any(|seg| {
-        rel_path.starts_with(seg) || rel_path.contains(&format!("/{}", seg))
+        rel_path.starts_with(seg) || rel_path.contains(&format!("/{seg}"))
     })
 }
 
@@ -575,8 +575,7 @@ fn parse_file(content: &str, rel_path: &str, lang: Lang) -> FileData {
                         if !name.is_empty() {
                             // Check if this function is a method inside a class.
                             let is_method = node.parent()
-                                .map(|p| p.kind() == "block" && p.parent().map(|gp| gp.kind() == "class_definition").unwrap_or(false))
-                                .unwrap_or(false);
+                                .is_some_and(|p| p.kind() == "block" && p.parent().is_some_and(|gp| gp.kind() == "class_definition"));
                             let kind = if is_method { "method" } else { "function" };
                             definitions.push((name, line, kind.to_string()));
                             def_lines.insert(line);
@@ -688,15 +687,13 @@ fn parse_file(content: &str, rel_path: &str, lang: Lang) -> FileData {
         // identifier that is itself the declared name (function/class)
         // or an imported name. Type hints on the same line as `def`
         // must still count as usages (Task 12).
-        if node.kind() == "identifier" || node.kind() == "property_identifier"
-            || node.kind() == "type_identifier"
-        {
-            if !is_decl_or_import_name(node) {
+        if (node.kind() == "identifier" || node.kind() == "property_identifier"
+            || node.kind() == "type_identifier")
+            && !is_decl_or_import_name(node) {
                 if let Ok(text) = node.utf8_text(content.as_bytes()) {
                     used_identifiers.insert(text.to_string());
                 }
             }
-        }
     });
 
     // Filter out decorated definitions
@@ -961,8 +958,7 @@ fn only_trivial_identifiers(root: tree_sitter::Node, source: &str) -> bool {
             && stmt.named_child_count() == 1
             && stmt
                 .named_child(0)
-                .map(|c| matches!(c.kind(), "identifier" | "string"))
-                .unwrap_or(false);
+                .is_some_and(|c| matches!(c.kind(), "identifier" | "string"));
         if is_trivial {
             trivial_count += 1;
         }
@@ -1085,7 +1081,7 @@ pub fn scan_dead_code(path: &str, _entry_point_paths: Vec<String>) -> PyResult<D
     let root = Path::new(path);
     if !root.is_dir() {
         return Err(pyo3::exceptions::PyValueError::new_err(
-            format!("Not a directory: {}", path),
+            format!("Not a directory: {path}"),
         ));
     }
 
@@ -1174,12 +1170,12 @@ pub fn scan_dead_code(path: &str, _entry_point_paths: Vec<String>) -> PyResult<D
                 global_identifiers.insert(name.clone());
                 // For aliased imports like `reset_db_for_tests as _reset_db_for_tests`,
                 // find the pattern `<original> as <alias>` where alias matches `name`.
-                let search = format!(" as {}", name);
+                let search = format!(" as {name}");
                 if let Some(pos) = stmt.find(&search) {
                     // Walk backwards from the match to find the original name.
                     let before = stmt[..pos].trim_end();
                     let original = before
-                        .rsplit(|c: char| c == ' ' || c == ',' || c == '(')
+                        .rsplit([' ', ',', '('])
                         .next()
                         .unwrap_or("")
                         .trim();

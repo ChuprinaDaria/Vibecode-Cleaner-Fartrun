@@ -68,11 +68,11 @@ pub const SOURCE_EXTENSIONS: &[&str] = &[
 /// Checks both hardcoded names AND detects non-standard Python venvs
 /// (by looking for pyvenv.cfg inside the directory).
 pub fn should_skip(name: &str) -> bool {
-    ALWAYS_SKIP.iter().any(|s| *s == name)
+    ALWAYS_SKIP.contains(&name)
 }
 
 /// Extended skip check that also detects non-standard virtualenvs
-/// by looking for `pyvenv.cfg`. Use in filter_entry where you have
+/// by looking for `pyvenv.cfg`. Use in `filter_entry` where you have
 /// access to the full path.
 pub fn should_skip_entry(entry: &ignore::DirEntry) -> bool {
     if let Some(name) = entry.file_name().to_str() {
@@ -81,11 +81,10 @@ pub fn should_skip_entry(entry: &ignore::DirEntry) -> bool {
         }
     }
     // Detect non-standard Python venvs (e.g. tg-session-env/)
-    if entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
-        if entry.path().join("pyvenv.cfg").exists() {
+    if entry.file_type().is_some_and(|ft| ft.is_dir())
+        && entry.path().join("pyvenv.cfg").exists() {
             return true;
         }
-    }
     false
 }
 
@@ -164,7 +163,7 @@ pub fn is_generated_or_data_file(rel_path: &str) -> bool {
 }
 
 /// Return true if a relative path looks like test code. Pattern shared by
-/// duplicates, tech_debt, reusable, overengineering scanners.
+/// duplicates, `tech_debt`, reusable, overengineering scanners.
 pub fn is_test_path(rel_path: &str) -> bool {
     rel_path.contains("/test")
         || rel_path.starts_with("test")

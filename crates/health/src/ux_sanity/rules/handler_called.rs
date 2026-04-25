@@ -1,9 +1,9 @@
 use crate::ux_sanity::issue::Issue;
 use crate::ux_sanity::parser::{offset_to_line_col, ParsedFile};
-use oxc_ast::ast::*;
+use oxc_ast::ast::{Statement, Declaration, ExportDefaultDeclarationKind, Expression, JSXChild, JSXElement, JSXAttributeItem, JSXAttributeName, JSXAttributeValue};
 
-/// onClick={handleClick()} instead of onClick={handleClick}
-/// Triggers only on CallExpression with Identifier callee and 0 args.
+/// `onClick={handleClick()`} instead of onClick={handleClick}
+/// Triggers only on `CallExpression` with Identifier callee and 0 args.
 pub fn check(parsed: &ParsedFile, file: &str) -> Vec<Issue> {
     let mut issues = Vec::new();
     walk(&parsed.program.body, parsed.source, file, &mut issues);
@@ -143,8 +143,7 @@ fn check_jsx(jsx: &JSXElement, source: &str, file: &str, issues: &mut Vec<Issue>
                         line,
                         col,
                         format!(
-                            "{}={{handler()}} calls function at render time. Use {}={{handler}} instead",
-                            attr_name, attr_name
+                            "{attr_name}={{handler()}} calls function at render time. Use {attr_name}={{handler}} instead"
                         ),
                     ));
                 }
