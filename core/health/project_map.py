@@ -256,13 +256,14 @@ def run_all_checks(project_dir: str, *, use_cache: bool = True) -> HealthReport:
         except BaseException as e:
             log.error("monsters scan error: %s", e)
 
-        # Phase 2: Dead Code
+        # Phase 2: Dead Code (delta-aware via file_data_cache)
         try:
             from core.health.dead_code import run_dead_code_checks
             entry_paths = [ep["path"] for ep in report.entry_points]
             run_dead_code_checks(
                 report, health_rs, project_dir, entry_paths,
                 scan_ctx=scan_ctx,
+                delta_context=delta_context,
             )
         except BaseException as e:
             log.error("dead_code scan error: %s", e)

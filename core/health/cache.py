@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import sqlite3
 import time
 from dataclasses import asdict
@@ -22,6 +23,11 @@ from pathlib import Path
 
 from core.health.git_utils import is_git_repo, run_git
 from core.health.models import HealthFinding, HealthReport
+
+# Two-char status code (X = staging, Y = worktree) followed by a space,
+# followed by the path. Robust to run_git's .strip() that eats the leading
+# space of unstaged-only entries (` M path` → `M path`).
+_PORCELAIN_LINE = re.compile(r"^[ ?ACDMRTU!]{1,2}\s+(.*)$")
 
 log = logging.getLogger(__name__)
 
@@ -50,7 +56,13 @@ def _project_key(project_dir: str) -> str:
 def head_hash(project_dir: str) -> str | None:
     """Return the git HEAD commit hash, or None when we should bypass cache:
     not a git repo, no HEAD yet, or working tree is dirty (uncommitted changes
-    would make a cached scan misleading)."""
+    would make a cached scan misleading).
+
+    Modifications under `.fartrun/` are ignored — that directory is where
+    the tool itself writes its output (HEALTH-REPORT-*.md, etc.), so its
+    contents are downstream of the scan, not user code that would change
+    the result.
+    """
     if not is_git_repo(project_dir):
         return None
     head = run_git(project_dir, "rev-parse", "HEAD")
@@ -58,9 +70,21 @@ def head_hash(project_dir: str) -> str | None:
         return None
     status = run_git(project_dir, "status", "--porcelain")
     if status:
-        # Any modification, addition, deletion or untracked file. Bypass
-        # cache so the scan reflects current disk state.
-        return None
+        # Filter out fartrun's own output. We can't rely on column slicing
+        # because `run_git` already strips leading whitespace, so the
+        # ` M path` form arrives as `M path`. Regex extracts the path
+        # robustly across status formats.
+        for line in status.splitlines():
+            m = _PORCELAIN_LINE.match(line)
+            if not m:
+                # Unparseable line — be conservative and treat as dirty.
+                return None
+            path = m.group(1).strip().strip('"')
+            if " -> " in path:
+                # Rename: `old -> new`. The new path is what's on disk.
+                path = path.split(" -> ", 1)[1].strip().strip('"')
+            if path != ".fartrun" and not path.startswith(".fartrun/"):
+                return None
     return head.strip()
 
 
@@ -75,6 +99,23 @@ def _connect() -> sqlite3.Connection:
             created_at REAL NOT NULL,
             payload TEXT NOT NULL,
             PRIMARY KEY (project_key, head_hash, schema_version)
+        )
+        """
+    )
+    # Per-file intermediate state for incremental scans. Each row is one
+    # source file's serialized parser output, keyed by which scanner
+    # produced it (e.g. 'dead_code') so different scanners can persist
+    # independently without colliding.
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS file_data_cache (
+            project_key TEXT NOT NULL,
+            head_hash TEXT NOT NULL,
+            scanner TEXT NOT NULL,
+            schema_version INTEGER NOT NULL,
+            rel_path TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            PRIMARY KEY (project_key, head_hash, scanner, schema_version, rel_path)
         )
         """
     )
@@ -174,17 +215,25 @@ def put(project_dir: str, report: HealthReport) -> bool:
 
 def clear(project_dir: str | None = None) -> int:
     """Remove cached entries. With project_dir, only entries for that project;
-    without, every entry. Returns rows removed (0 on error)."""
+    without, every entry. Returns the count of scan_cache rows removed
+    (file_data_cache is wiped too but not counted, since it's an
+    implementation detail of incremental scans)."""
     try:
         conn = _connect()
         try:
             if project_dir is not None:
+                key = _project_key(project_dir)
                 cur = conn.execute(
                     "DELETE FROM scan_cache WHERE project_key=?",
-                    (_project_key(project_dir),),
+                    (key,),
+                )
+                conn.execute(
+                    "DELETE FROM file_data_cache WHERE project_key=?",
+                    (key,),
                 )
             else:
                 cur = conn.execute("DELETE FROM scan_cache")
+                conn.execute("DELETE FROM file_data_cache")
             conn.commit()
             return cur.rowcount
         finally:
@@ -213,6 +262,71 @@ def list_cached_hashes(project_dir: str) -> set[str]:
         log.warning("scan_cache.list_cached_hashes: sqlite error: %s", e)
         return set()
     return {row[0] for row in rows}
+
+
+def get_file_data(
+    project_dir: str,
+    head_hash_value: str,
+    scanner: str,
+) -> dict[str, str]:
+    """Load a `{rel_path: payload}` mapping for a given scanner at a
+    specific commit hash. Returns an empty dict on miss or sqlite error
+    so callers can drop into a clean full scan without special-casing."""
+    key = _project_key(project_dir)
+    try:
+        conn = _connect()
+        try:
+            rows = conn.execute(
+                "SELECT rel_path, payload FROM file_data_cache "
+                "WHERE project_key=? AND head_hash=? AND scanner=? "
+                "AND schema_version=?",
+                (key, head_hash_value, scanner, CACHE_SCHEMA_VERSION),
+            ).fetchall()
+        finally:
+            conn.close()
+    except sqlite3.Error as e:
+        log.warning("scan_cache.get_file_data: sqlite error: %s", e)
+        return {}
+    return {rel: payload for rel, payload in rows}
+
+
+def put_file_data(
+    project_dir: str,
+    head_hash_value: str,
+    scanner: str,
+    state: dict[str, str],
+) -> bool:
+    """Replace the persisted `{rel_path: payload}` set for `(head_hash,
+    scanner)`. Existing rows for the same key are deleted first so the
+    cache stays in sync with what the orchestrator just produced."""
+    key = _project_key(project_dir)
+    try:
+        conn = _connect()
+        try:
+            conn.execute(
+                "DELETE FROM file_data_cache "
+                "WHERE project_key=? AND head_hash=? AND scanner=? "
+                "AND schema_version=?",
+                (key, head_hash_value, scanner, CACHE_SCHEMA_VERSION),
+            )
+            if state:
+                conn.executemany(
+                    "INSERT INTO file_data_cache "
+                    "(project_key, head_hash, scanner, schema_version, "
+                    " rel_path, payload) VALUES (?, ?, ?, ?, ?, ?)",
+                    [
+                        (key, head_hash_value, scanner, CACHE_SCHEMA_VERSION,
+                         rel, payload)
+                        for rel, payload in state.items()
+                    ],
+                )
+            conn.commit()
+        finally:
+            conn.close()
+    except sqlite3.Error as e:
+        log.warning("scan_cache.put_file_data: sqlite error: %s", e)
+        return False
+    return True
 
 
 def get_at(project_dir: str, head_hash_value: str) -> HealthReport | None:

@@ -1329,6 +1329,52 @@ pub fn parse_dead_code_file_json(
         .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
 }
 
+/// Walk the source tree, parse each file, and return a
+/// `{rel_path: file_data_json}` mapping. This is the same Phase-1 work
+/// `scan_dead_code` does internally, but exposed so the orchestrator can
+/// persist the intermediate state for later incremental runs.
+///
+/// Uses `ctx` to share parsed trees with other context-aware scanners
+/// running in the same `run_all_checks` call.
+#[pyfunction]
+#[pyo3(signature = (path, ctx=None))]
+pub fn collect_dead_code_state(
+    path: &str,
+    ctx: Option<&ScanContext>,
+) -> PyResult<std::collections::HashMap<String, String>> {
+    let root = Path::new(path);
+    if !root.is_dir() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            format!("Not a directory: {path}"),
+        ));
+    }
+    let mut out = std::collections::HashMap::new();
+    for src in collect_source_files(root, &WalkOpts::default()) {
+        let Some(lang) = Lang::from_ext(src.ext.as_str()) else {
+            continue;
+        };
+        let content_holder = if let Some(ctx) = ctx {
+            ctx.read_file(&src.rel_path, &src.abs_path)
+        } else {
+            fs::read_to_string(&src.abs_path).ok().map(std::sync::Arc::new)
+        };
+        let Some(content_arc) = content_holder else {
+            continue;
+        };
+        let fd = parse_file(content_arc.as_str(), &src.rel_path, lang, ctx);
+        match serde_json::to_string(&fd) {
+            Ok(payload) => {
+                out.insert(src.rel_path, payload);
+            }
+            Err(e) => eprintln!(
+                "collect_dead_code_state: serialize failed for {}: {e}",
+                src.rel_path
+            ),
+        }
+    }
+    Ok(out)
+}
+
 /// Run the cross-file dead-code analysis (phases 2-5) on a pre-parsed
 /// FileData set passed as a list of JSON payloads. Returns the same
 /// DeadCodeResult shape as `scan_dead_code`.

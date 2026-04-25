@@ -100,23 +100,66 @@ def run_dead_code_checks(
     entry_point_paths: list[str],
     *,
     scan_ctx=None,
+    delta_context=None,
 ) -> None:
     """Run dead code checks and append findings to report.
 
-    When `scan_ctx` is provided, the cached file contents and parsed trees
-    are reused — typically populated by an earlier `scan_module_map_with_context`
-    call in the same run.
+    Three paths:
+    1. delta_context provided AND ancestor file_data_cache row exists →
+       incremental scan: re-parse only changed files, replay the cached
+       FileData for the rest, run cross-file analysis, persist new state.
+    2. delta_context provided BUT no cached file_data → fall through to
+       full scan (next run can be incremental).
+    3. No delta_context → full scan.
+
+    Full-scan paths (2 and 3) go through collect_dead_code_state +
+    assemble_dead_code_from_json so they ALSO produce file_data_cache
+    rows for the next delta. This means the very first run on any new
+    HEAD pays no extra cost beyond what scan_dead_code already did.
     """
-    try:
-        if scan_ctx is not None:
-            result = health_rs.scan_dead_code_with_context(
-                scan_ctx, project_dir, entry_point_paths,
-            )
-        else:
-            result = health_rs.scan_dead_code(project_dir, entry_point_paths)
-    except BaseException as e:
-        log.error("dead_code scan error: %s", e)
-        return
+    from core.health import cache as cache_mod
+
+    new_state: dict[str, str] | None = None
+    result = None
+    used_delta = False
+
+    if delta_context is not None:
+        plan, _ancestor_report = delta_context
+        prior_state = cache_mod.get_file_data(
+            project_dir, plan.ancestor_hash, "dead_code",
+        )
+        if prior_state:
+            try:
+                result, new_state = incremental_dead_code_scan(
+                    health_rs, project_dir, prior_state,
+                    changed_paths=set(plan.added_or_modified),
+                    deleted_paths=set(plan.deleted),
+                )
+                used_delta = True
+                log.info(
+                    "dead_code: incremental run, %d carried over, %d re-parsed",
+                    len(prior_state) - len(plan.added_or_modified) - len(plan.deleted),
+                    len(plan.added_or_modified),
+                )
+            except BaseException as e:
+                log.error("incremental dead_code failed, falling back: %s", e)
+                result = None
+                new_state = None
+
+    if result is None:
+        try:
+            new_state = health_rs.collect_dead_code_state(project_dir, scan_ctx)
+            result = health_rs.assemble_dead_code_from_json(list(new_state.values()))
+        except BaseException as e:
+            log.error("dead_code scan error: %s", e)
+            return
+
+    if new_state is not None:
+        head = cache_mod.head_hash(project_dir)
+        if head:
+            cache_mod.put_file_data(project_dir, head, "dead_code", new_state)
+
+    log.debug("dead_code: used_delta=%s, state_files=%d", used_delta, len(new_state or {}))
 
     # Unused imports
     report.unused_imports = [
