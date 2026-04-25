@@ -141,6 +141,49 @@ def _run_module_map(
     return result
 
 
+def _run_reusable(health_rs, project_dir: str, *, delta_context):
+    """Reusable dispatch: incremental → fallback full → no-delta full,
+    with persistence on every run."""
+    from core.health import cache as cache_mod
+    from core.health.reusable import incremental_reusable_scan
+
+    new_state: dict[str, str] | None = None
+    result = None
+
+    if delta_context is not None:
+        plan, _ancestor = delta_context
+        prior_state = cache_mod.get_file_data(
+            project_dir, plan.ancestor_hash, "reusable",
+        )
+        if prior_state:
+            try:
+                result, new_state = incremental_reusable_scan(
+                    health_rs, project_dir, prior_state,
+                    changed_paths=set(plan.added_or_modified),
+                    deleted_paths=set(plan.deleted),
+                )
+                log.info(
+                    "reusable: incremental run, %d carried over, %d re-parsed",
+                    len(prior_state) - len(plan.added_or_modified) - len(plan.deleted),
+                    len(plan.added_or_modified),
+                )
+            except BaseException as e:
+                log.error("incremental reusable failed, falling back: %s", e)
+                result = None
+                new_state = None
+
+    if result is None:
+        new_state = health_rs.collect_reusable_state(project_dir)
+        result = health_rs.assemble_reusable_from_json(new_state)
+
+    if new_state is not None:
+        head = cache_mod.head_hash(project_dir)
+        if head:
+            cache_mod.put_file_data(project_dir, head, "reusable", new_state)
+
+    return result
+
+
 def _run_duplicates(health_rs, project_dir: str, *, delta_context):
     """Duplicates dispatch: incremental when ancestor state is cached,
     full scan otherwise. Always persists state under the current HEAD
@@ -389,9 +432,11 @@ def run_all_checks(project_dir: str, *, use_cache: bool = True) -> HealthReport:
         except BaseException as e:
             log.error("duplicates scan error: %s", e)
 
-        # Check 3.6: Reusable Components (frontend)
+        # Check 3.6: Reusable Components (frontend, delta-aware)
         try:
-            reuse_result = health_rs.scan_reusable(project_dir)
+            reuse_result = _run_reusable(
+                health_rs, project_dir, delta_context=delta_context,
+            )
             for pat in reuse_result.patterns[:10]:
                 report.findings.append(HealthFinding(
                     check_id="debt.no_reuse",

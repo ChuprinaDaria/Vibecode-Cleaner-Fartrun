@@ -75,6 +75,9 @@ fn health(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<reusable::ReusablePattern>()?;
     m.add_class::<reusable::ReusableResult>()?;
     m.add_function(wrap_pyfunction!(reusable::scan_reusable, m)?)?;
+    m.add_function(wrap_pyfunction!(reusable::parse_reusable_file_json, m)?)?;
+    m.add_function(wrap_pyfunction!(reusable::assemble_reusable_from_json, m)?)?;
+    m.add_function(wrap_pyfunction!(reusable::collect_reusable_state, m)?)?;
 
     m.add_function(wrap_pyfunction!(scan_ux_sanity, m)?)?;
 
