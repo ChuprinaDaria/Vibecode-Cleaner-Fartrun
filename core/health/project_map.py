@@ -238,7 +238,7 @@ def run_all_checks(project_dir: str, *, use_cache: bool = True) -> HealthReport:
         except BaseException as e:
             log.error("module_map scan error: %s", e)
 
-        # Check 1.4 — Monsters (delta-aware)
+        # Check 1.4 — Monsters (delta-aware, context-aware)
         try:
             if delta_context is not None:
                 plan, ancestor = delta_context
@@ -246,7 +246,12 @@ def run_all_checks(project_dir: str, *, use_cache: bool = True) -> HealthReport:
                     report, health_rs, project_dir, plan, ancestor,
                 )
             else:
-                monsters_result = health_rs.scan_monsters(project_dir)
+                if scan_ctx is not None:
+                    monsters_result = health_rs.scan_monsters_with_context(
+                        scan_ctx, project_dir,
+                    )
+                else:
+                    monsters_result = health_rs.scan_monsters(project_dir)
                 delta_scan.append_full_monsters(report, monsters_result)
         except BaseException as e:
             log.error("monsters scan error: %s", e)
@@ -303,7 +308,7 @@ def run_all_checks(project_dir: str, *, use_cache: bool = True) -> HealthReport:
         except BaseException as e:
             log.error("ux_sanity scan error: %s", e)
 
-        # Phase 3: Tech Debt (delta-aware)
+        # Phase 3: Tech Debt (delta-aware, context-aware)
         try:
             if delta_context is not None:
                 plan, ancestor = delta_context
@@ -312,7 +317,9 @@ def run_all_checks(project_dir: str, *, use_cache: bool = True) -> HealthReport:
                 )
             else:
                 from core.health.tech_debt import run_tech_debt_checks
-                run_tech_debt_checks(report, health_rs, project_dir)
+                run_tech_debt_checks(
+                    report, health_rs, project_dir, scan_ctx=scan_ctx,
+                )
         except BaseException as e:
             log.error("tech_debt scan error: %s", e)
 
@@ -330,7 +337,7 @@ def run_all_checks(project_dir: str, *, use_cache: bool = True) -> HealthReport:
         # Phase 4: Brake System
         try:
             from core.health.brake_system import run_brake_checks
-            run_brake_checks(report, health_rs, project_dir)
+            run_brake_checks(report, health_rs, project_dir, scan_ctx=scan_ctx)
         except Exception as e:
             log.error("brake_system scan error: %s", e)
 

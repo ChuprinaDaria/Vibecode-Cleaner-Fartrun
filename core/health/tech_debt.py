@@ -150,10 +150,20 @@ def run_tech_debt_checks(
     report: HealthReport,
     health_rs,
     project_dir: str,
+    *,
+    scan_ctx=None,
 ) -> None:
-    """Run the full tech-debt scan and append capped findings to report."""
+    """Run the full tech-debt scan and append capped findings to report.
+
+    When `scan_ctx` is provided, parsed trees and file contents already
+    cached by earlier scanners (module_map, dead_code, monsters) are
+    reused; otherwise the no-context entry point is called.
+    """
     try:
-        result = health_rs.scan_tech_debt(project_dir)
+        if scan_ctx is not None:
+            result = health_rs.scan_tech_debt_with_context(scan_ctx, project_dir)
+        else:
+            result = health_rs.scan_tech_debt(project_dir)
     except BaseException as e:
         log.error("tech_debt scan error: %s", e)
         return

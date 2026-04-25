@@ -196,10 +196,23 @@ def check_scope_creep(report: HealthReport, project_dir: str) -> None:
         ))
 
 
-def check_overengineering(report: HealthReport, health_rs, project_dir: str) -> None:
-    """Check 4.5 — overengineering via Rust scanner."""
+def check_overengineering(
+    report: HealthReport,
+    health_rs,
+    project_dir: str,
+    *,
+    scan_ctx=None,
+) -> None:
+    """Check 4.5 — overengineering via Rust scanner.
+
+    When `scan_ctx` is provided, parsed Python trees from earlier scanners
+    are reused for the single_method_classes / tiny_file checks.
+    """
     try:
-        result = health_rs.scan_overengineering(project_dir)
+        if scan_ctx is not None:
+            result = health_rs.scan_overengineering_with_context(scan_ctx, project_dir)
+        else:
+            result = health_rs.scan_overengineering(project_dir)
     except Exception as e:
         log.error("overengineering scan error: %s", e)
         return
@@ -235,11 +248,14 @@ def run_brake_checks(
     report: HealthReport,
     health_rs,
     project_dir: str,
+    *,
+    scan_ctx=None,
 ) -> None:
-    """Run all brake system checks."""
+    """Run all brake system checks. When `scan_ctx` is provided it threads
+    into the Rust-backed overengineering check so it can reuse cached trees."""
     check_unfinished_work(report, project_dir)
     check_test_health(report, project_dir)
     check_scope_creep(report, project_dir)
     check_opensource_first(report, project_dir)
     if health_rs is not None:
-        check_overengineering(report, health_rs, project_dir)
+        check_overengineering(report, health_rs, project_dir, scan_ctx=scan_ctx)

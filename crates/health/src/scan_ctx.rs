@@ -122,6 +122,27 @@ impl ScanContext {
     }
 }
 
+/// Get an `Arc<Tree>` for `(rel_path, lang)` using `ctx` when provided,
+/// otherwise parsing in place. Shared by every scanner that opts into
+/// the context cache so they all hit the same `set_language` /
+/// fallback / logging path.
+pub fn parse_or_cached(
+    ctx: Option<&ScanContext>,
+    rel_path: &str,
+    lang: CtxLang,
+    content: &str,
+) -> Option<Arc<Tree>> {
+    if let Some(c) = ctx {
+        return c.parse(rel_path, lang, content);
+    }
+    let mut parser = Parser::new();
+    if let Err(e) = parser.set_language(&lang.ts_language()) {
+        eprintln!("scan_ctx::parse_or_cached: set_language({lang:?}) failed for {rel_path}: {e}");
+        return None;
+    }
+    parser.parse(content, None).map(Arc::new)
+}
+
 #[pymethods]
 impl ScanContext {
     #[new]

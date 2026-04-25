@@ -143,3 +143,95 @@ class TestCacheSharingAcrossScanners:
         new_misses = file_misses_after_second - file_misses_after_first
         assert new_misses <= 1
         assert file_hits_total >= 4
+
+    def test_monsters_after_module_map_reuses_cache(self, tmp_path):
+        """monsters scans files >500 lines. After module_map populates
+        the cache for those files, scan_monsters_with_context must not
+        record new tree-cache misses for them."""
+        _write(tmp_path / "big.py",
+               "\n".join(f"x{i} = {i}" for i in range(700)) + "\n")
+        _write(tmp_path / "tiny.py", "x = 1\n")
+        ctx = health.ScanContext()
+        health.scan_module_map_with_context(ctx, str(tmp_path), [])
+        tree_misses_before = ctx.stats()[3]
+        result = health.scan_monsters_with_context(ctx, str(tmp_path))
+        tree_misses_after = ctx.stats()[3]
+        # big.py was already parsed by module_map → no new miss for it.
+        assert tree_misses_after == tree_misses_before
+        assert any(m.path == "big.py" for m in result.monsters)
+
+    def test_tech_debt_after_module_map_reuses_cache(self, tmp_path):
+        _make_small_project(tmp_path)
+        ctx = health.ScanContext()
+        health.scan_module_map_with_context(ctx, str(tmp_path), [])
+        tree_misses_before = ctx.stats()[3]
+        tree_size_before = ctx.cache_size()[1]
+
+        health.scan_tech_debt_with_context(ctx, str(tmp_path))
+
+        tree_misses_after = ctx.stats()[3]
+        tree_hits_after = ctx.stats()[2]
+        # tech_debt parses Python files for missing_types AND error_gaps —
+        # both can resolve to the same cached tree, so we expect hits.
+        assert tree_hits_after >= 1
+        # Cache size shouldn't balloon — every Python file the scanner
+        # visits should already be in there.
+        new_entries = ctx.cache_size()[1] - tree_size_before
+        assert new_entries == 0
+
+    def test_overengineering_after_module_map_reuses_cache(self, tmp_path):
+        _make_small_project(tmp_path)
+        ctx = health.ScanContext()
+        health.scan_module_map_with_context(ctx, str(tmp_path), [])
+        tree_size_before = ctx.cache_size()[1]
+        tree_hits_before = ctx.stats()[2]
+
+        health.scan_overengineering_with_context(ctx, str(tmp_path))
+
+        tree_hits_after = ctx.stats()[2]
+        # Python single_method_classes parse on each .py file should hit
+        # the cache populated by module_map.
+        assert tree_hits_after >= tree_hits_before + 1
+        new_entries = ctx.cache_size()[1] - tree_size_before
+        # overengineering only handles Python here, so no new TS/JS trees.
+        assert new_entries == 0
+
+
+# --- equivalence: with-context output matches without-context for new scanners ---
+
+
+class TestExtendedEquivalence:
+    def test_monsters_equivalence(self, tmp_path):
+        _write(tmp_path / "big.py",
+               "\n".join(f"x{i} = {i}" for i in range(700)) + "\n")
+        _write(tmp_path / "klass.py",
+               "class A:\n    def f(self):\n        return 1\n" * 200)
+        a = health.scan_monsters(str(tmp_path))
+        b = health.scan_monsters_with_context(health.ScanContext(), str(tmp_path))
+        assert sorted(m.path for m in a.monsters) == sorted(m.path for m in b.monsters)
+        assert sorted((m.path, m.lines, m.functions, m.classes) for m in a.monsters) == \
+               sorted((m.path, m.lines, m.functions, m.classes) for m in b.monsters)
+
+    def test_tech_debt_equivalence(self, tmp_path):
+        _write(tmp_path / "x.py",
+               "# TODO: fix\n"
+               "def f(a, b):\n    try:\n        pass\n    except:\n        pass\n")
+        a = health.scan_tech_debt(str(tmp_path))
+        b = health.scan_tech_debt_with_context(health.ScanContext(), str(tmp_path))
+        assert sorted((t.path, t.line, t.kind) for t in a.todos) == \
+               sorted((t.path, t.line, t.kind) for t in b.todos)
+        assert sorted((m.path, m.line, m.function_name) for m in a.missing_types) == \
+               sorted((m.path, m.line, m.function_name) for m in b.missing_types)
+        assert sorted((e.path, e.line, e.kind) for e in a.error_gaps) == \
+               sorted((e.path, e.line, e.kind) for e in b.error_gaps)
+
+    def test_overengineering_equivalence(self, tmp_path):
+        # A class with a single method is the canonical overengineering trigger.
+        _write(tmp_path / "service.py",
+               "class Service:\n    def run(self):\n        return 1\n")
+        a = health.scan_overengineering(str(tmp_path))
+        b = health.scan_overengineering_with_context(
+            health.ScanContext(), str(tmp_path),
+        )
+        assert sorted((i.path, i.kind) for i in a.issues) == \
+               sorted((i.path, i.kind) for i in b.issues)

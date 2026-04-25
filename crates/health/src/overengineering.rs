@@ -10,6 +10,7 @@ use std::path::Path;
 use pyo3::prelude::*;
 
 use crate::common::{collect_source_files, is_test_path, WalkOpts};
+use crate::scan_ctx::{parse_or_cached, CtxLang, ScanContext};
 
 /// Return true if this file follows a framework pattern that INTENTIONALLY
 /// produces single-method classes: `NestJS` commands/migrations, Django/Alembic
@@ -186,17 +187,10 @@ fn extract_base_classes(node: tree_sitter::Node, content: &str) -> Vec<String> {
 fn check_single_method_classes_python(
     content: &str,
     rel_path: &str,
+    ctx: Option<&ScanContext>,
 ) -> Vec<OverengineeringIssue> {
-    let mut parser = tree_sitter::Parser::new();
-    if parser
-        .set_language(&tree_sitter_python::LANGUAGE.into())
-        .is_err()
-    {
+    let Some(tree) = parse_or_cached(ctx, rel_path, CtxLang::Python, content) else {
         return vec![];
-    }
-    let tree = match parser.parse(content, None) {
-        Some(t) => t,
-        None => return vec![],
     };
 
     let mut issues = Vec::new();
@@ -289,19 +283,11 @@ fn check_single_method_classes_js(
     content: &str,
     rel_path: &str,
     is_ts: bool,
+    ctx: Option<&ScanContext>,
 ) -> Vec<OverengineeringIssue> {
-    let mut parser = tree_sitter::Parser::new();
-    let lang = if is_ts {
-        tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into()
-    } else {
-        tree_sitter_javascript::LANGUAGE.into()
-    };
-    if parser.set_language(&lang).is_err() {
+    let lang = if is_ts { CtxLang::TypeScript } else { CtxLang::JavaScript };
+    let Some(tree) = parse_or_cached(ctx, rel_path, lang, content) else {
         return vec![];
-    }
-    let tree = match parser.parse(content, None) {
-        Some(t) => t,
-        None => return vec![],
     };
 
     let mut issues = Vec::new();
@@ -378,6 +364,21 @@ fn check_single_method_classes_js(
 
 #[pyfunction]
 pub fn scan_overengineering(path: &str) -> PyResult<OverengineeringResult> {
+    scan_overengineering_inner(path, None)
+}
+
+#[pyfunction]
+pub fn scan_overengineering_with_context(
+    ctx: &ScanContext,
+    path: &str,
+) -> PyResult<OverengineeringResult> {
+    scan_overengineering_inner(path, Some(ctx))
+}
+
+fn scan_overengineering_inner(
+    path: &str,
+    ctx: Option<&ScanContext>,
+) -> PyResult<OverengineeringResult> {
     let root = Path::new(path);
     if !root.is_dir() {
         return Err(pyo3::exceptions::PyValueError::new_err(
@@ -426,10 +427,19 @@ pub fn scan_overengineering(path: &str) -> PyResult<OverengineeringResult> {
             continue;
         }
 
-        let content = match fs::read_to_string(&src.abs_path) {
-            Ok(c) => c,
-            Err(_) => continue,
+        // Read content (cached if context provided).
+        let content_arc: std::sync::Arc<String> = if let Some(c) = ctx {
+            match c.read_file(&rel_path, &src.abs_path) {
+                Some(s) => s,
+                None => continue,
+            }
+        } else {
+            match fs::read_to_string(&src.abs_path) {
+                Ok(s) => std::sync::Arc::new(s),
+                Err(_) => continue,
+            }
         };
+        let content = content_arc.as_str();
 
         // Check tiny files (<20 non-empty lines with only 1 function, no classes)
         let non_empty_lines = content.lines().filter(|l| !l.trim().is_empty()).count();
@@ -437,22 +447,18 @@ pub fn scan_overengineering(path: &str) -> PyResult<OverengineeringResult> {
             let mut func_count = 0u32;
             let mut class_count = 0u32;
 
-            // Quick count via tree-sitter
+            // Quick count via tree-sitter (Python only). Goes through the
+            // cross-scanner cache when one is provided so this parse may
+            // be a free hit if module_map already saw the file.
             if ext == "py" {
-                let mut parser = tree_sitter::Parser::new();
-                if parser
-                    .set_language(&tree_sitter_python::LANGUAGE.into())
-                    .is_ok()
-                {
-                    if let Some(tree) = parser.parse(&content, None) {
-                        let r = tree.root_node();
-                        for i in 0..r.child_count() {
-                            if let Some(child) = r.child(i as u32) {
-                                match child.kind() {
-                                    "function_definition" => func_count += 1,
-                                    "class_definition" => class_count += 1,
-                                    _ => {}
-                                }
+                if let Some(tree) = parse_or_cached(ctx, &rel_path, CtxLang::Python, &content) {
+                    let r = tree.root_node();
+                    for i in 0..r.child_count() {
+                        if let Some(child) = r.child(i as u32) {
+                            match child.kind() {
+                                "function_definition" => func_count += 1,
+                                "class_definition" => class_count += 1,
+                                _ => {}
                             }
                         }
                     }
@@ -473,10 +479,10 @@ pub fn scan_overengineering(path: &str) -> PyResult<OverengineeringResult> {
 
         // Check single-method classes
         if ext == "py" {
-            issues.extend(check_single_method_classes_python(&content, &rel_path));
+            issues.extend(check_single_method_classes_python(&content, &rel_path, ctx));
         } else {
             let is_ts = ext == "ts" || ext == "tsx" || ext == "mts" || ext == "cts";
-            issues.extend(check_single_method_classes_js(&content, &rel_path, is_ts));
+            issues.extend(check_single_method_classes_js(&content, &rel_path, is_ts, ctx));
         }
     }
 

@@ -30,6 +30,7 @@ fn health(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<monsters::MonstersResult>()?;
     m.add_function(wrap_pyfunction!(monsters::scan_monsters, m)?)?;
     m.add_function(wrap_pyfunction!(monsters::scan_monsters_files, m)?)?;
+    m.add_function(wrap_pyfunction!(monsters::scan_monsters_with_context, m)?)?;
 
     m.add_class::<module_map::ModuleInfo>()?;
     m.add_class::<module_map::CircularDep>()?;
@@ -51,6 +52,7 @@ fn health(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<tech_debt::TechDebtResult>()?;
     m.add_function(wrap_pyfunction!(tech_debt::scan_tech_debt, m)?)?;
     m.add_function(wrap_pyfunction!(tech_debt::scan_tech_debt_files, m)?)?;
+    m.add_function(wrap_pyfunction!(tech_debt::scan_tech_debt_with_context, m)?)?;
 
     m.add_class::<duplicates::DuplicateBlock>()?;
     m.add_class::<duplicates::DuplicatesResult>()?;
@@ -59,6 +61,7 @@ fn health(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<overengineering::OverengineeringIssue>()?;
     m.add_class::<overengineering::OverengineeringResult>()?;
     m.add_function(wrap_pyfunction!(overengineering::scan_overengineering, m)?)?;
+    m.add_function(wrap_pyfunction!(overengineering::scan_overengineering_with_context, m)?)?;
 
     m.add_class::<reusable::ReusablePattern>()?;
     m.add_class::<reusable::ReusableResult>()?;

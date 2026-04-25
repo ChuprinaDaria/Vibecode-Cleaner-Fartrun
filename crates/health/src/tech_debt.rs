@@ -12,6 +12,7 @@ use crate::common::{
     collect_source_files, is_generated_or_data_file, is_test_path, normalize_path,
     SOURCE_EXTENSIONS, WalkOpts,
 };
+use crate::scan_ctx::{parse_or_cached, CtxLang, ScanContext};
 
 // --- PyO3 result structs ---
 
@@ -84,15 +85,13 @@ pub struct TechDebtResult {
 
 // --- Check 3.2: Missing Type Hints ---
 
-fn check_missing_types_python(content: &str, rel_path: &str) -> Vec<MissingType> {
-    let mut parser = tree_sitter::Parser::new();
-    if let Err(e) = parser.set_language(&tree_sitter_python::LANGUAGE.into()) {
-        eprintln!("health::tech_debt: set_language(python) failed for {rel_path}: {e}");
+fn check_missing_types_python(
+    content: &str,
+    rel_path: &str,
+    ctx: Option<&ScanContext>,
+) -> Vec<MissingType> {
+    let Some(tree) = parse_or_cached(ctx, rel_path, CtxLang::Python, content) else {
         return vec![];
-    }
-    let tree = match parser.parse(content, None) {
-        Some(t) => t,
-        None => return vec![],
     };
 
     let mut results = Vec::new();
@@ -191,15 +190,13 @@ fn check_missing_types_python(content: &str, rel_path: &str) -> Vec<MissingType>
 
 // --- Check 3.3: Error Handling Gaps ---
 
-fn check_error_gaps_python(content: &str, rel_path: &str) -> Vec<ErrorGap> {
-    let mut parser = tree_sitter::Parser::new();
-    if let Err(e) = parser.set_language(&tree_sitter_python::LANGUAGE.into()) {
-        eprintln!("health::tech_debt: set_language(python) failed for {rel_path}: {e}");
+fn check_error_gaps_python(
+    content: &str,
+    rel_path: &str,
+    ctx: Option<&ScanContext>,
+) -> Vec<ErrorGap> {
+    let Some(tree) = parse_or_cached(ctx, rel_path, CtxLang::Python, content) else {
         return vec![];
-    }
-    let tree = match parser.parse(content, None) {
-        Some(t) => t,
-        None => return vec![],
     };
 
     let mut results = Vec::new();
@@ -254,23 +251,15 @@ fn check_error_gaps_python(content: &str, rel_path: &str) -> Vec<ErrorGap> {
     results
 }
 
-fn check_error_gaps_js(content: &str, rel_path: &str, is_ts: bool) -> Vec<ErrorGap> {
-    let mut parser = tree_sitter::Parser::new();
-    let lang = if is_ts {
-        tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into()
-    } else {
-        tree_sitter_javascript::LANGUAGE.into()
-    };
-    if let Err(e) = parser.set_language(&lang) {
-        eprintln!(
-            "health::tech_debt: set_language({}) failed for {rel_path}: {e}",
-            if is_ts { "ts" } else { "js" }
-        );
+fn check_error_gaps_js(
+    content: &str,
+    rel_path: &str,
+    is_ts: bool,
+    ctx: Option<&ScanContext>,
+) -> Vec<ErrorGap> {
+    let lang = if is_ts { CtxLang::TypeScript } else { CtxLang::JavaScript };
+    let Some(tree) = parse_or_cached(ctx, rel_path, lang, content) else {
         return vec![];
-    }
-    let tree = match parser.parse(content, None) {
-        Some(t) => t,
-        None => return vec![],
     };
 
     let mut results = Vec::new();
@@ -462,36 +451,58 @@ fn analyze_tech_debt_file(
     abs_path: &Path,
     rel_path: &str,
     ext: &str,
+    ctx: Option<&ScanContext>,
     missing_types: &mut Vec<MissingType>,
     error_gaps: &mut Vec<ErrorGap>,
     hardcoded: &mut Vec<HardcodedValue>,
     todos: &mut Vec<TodoItem>,
 ) {
     let is_test = is_test_path(rel_path);
-    let Ok(content) = fs::read_to_string(abs_path) else {
-        return;
+    let content_arc: std::sync::Arc<String> = if let Some(c) = ctx {
+        match c.read_file(rel_path, abs_path) {
+            Some(s) => s,
+            None => return,
+        }
+    } else {
+        match fs::read_to_string(abs_path) {
+            Ok(s) => std::sync::Arc::new(s),
+            Err(_) => return,
+        }
     };
+    let content = content_arc.as_str();
 
     if ext == "py" {
         if !is_test {
-            missing_types.extend(check_missing_types_python(&content, rel_path));
+            missing_types.extend(check_missing_types_python(content, rel_path, ctx));
         }
-        error_gaps.extend(check_error_gaps_python(&content, rel_path));
+        error_gaps.extend(check_error_gaps_python(content, rel_path, ctx));
     } else {
         let is_ts = matches!(ext, "ts" | "tsx" | "mts" | "cts");
-        error_gaps.extend(check_error_gaps_js(&content, rel_path, is_ts));
+        error_gaps.extend(check_error_gaps_js(content, rel_path, is_ts, ctx));
         // JS type hint check only for .js (TS already has types)
         // Skip for now — JSDoc parsing is complex, add later
     }
 
     if !is_test {
-        hardcoded.extend(check_hardcoded(&content, rel_path));
+        hardcoded.extend(check_hardcoded(content, rel_path));
     }
-    todos.extend(check_todos(&content, rel_path));
+    todos.extend(check_todos(content, rel_path));
 }
 
 #[pyfunction]
 pub fn scan_tech_debt(path: &str) -> PyResult<TechDebtResult> {
+    scan_tech_debt_inner(path, None)
+}
+
+#[pyfunction]
+pub fn scan_tech_debt_with_context(
+    ctx: &ScanContext,
+    path: &str,
+) -> PyResult<TechDebtResult> {
+    scan_tech_debt_inner(path, Some(ctx))
+}
+
+fn scan_tech_debt_inner(path: &str, ctx: Option<&ScanContext>) -> PyResult<TechDebtResult> {
     let root = Path::new(path);
     if !root.is_dir() {
         return Err(pyo3::exceptions::PyValueError::new_err(
@@ -509,6 +520,7 @@ pub fn scan_tech_debt(path: &str) -> PyResult<TechDebtResult> {
             &src.abs_path,
             &src.rel_path,
             src.ext.as_str(),
+            ctx,
             &mut missing_types,
             &mut error_gaps,
             &mut hardcoded,
@@ -556,6 +568,7 @@ pub fn scan_tech_debt_files(root: &str, files: Vec<String>) -> PyResult<TechDebt
             &abs_path,
             &rel_norm,
             &ext_lower,
+            None,
             &mut missing_types,
             &mut error_gaps,
             &mut hardcoded,

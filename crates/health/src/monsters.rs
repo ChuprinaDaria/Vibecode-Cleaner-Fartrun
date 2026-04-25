@@ -4,10 +4,12 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use pyo3::prelude::*;
 
 use crate::common::{collect_source_files, is_generated_or_data_file, normalize_path, SOURCE_EXTENSIONS, WalkOpts};
+use crate::scan_ctx::{parse_or_cached, CtxLang, ScanContext};
 
 #[pyclass]
 #[derive(Clone)]
@@ -43,56 +45,23 @@ fn severity_for_lines(lines: u32) -> Option<&'static str> {
     }
 }
 
-fn count_definitions_python(content: &str) -> (u32, u32) {
-    let mut parser = tree_sitter::Parser::new();
-    if parser
-        .set_language(&tree_sitter_python::LANGUAGE.into())
-        .is_err()
-    {
-        return (0, 0);
-    }
-
-    let tree = match parser.parse(content, None) {
-        Some(t) => t,
-        None => return (0, 0),
-    };
-
+/// Walk a parsed tree counting Python function/class definitions.
+fn count_python_in_tree(tree: &tree_sitter::Tree) -> (u32, u32) {
     let mut functions: u32 = 0;
     let mut classes: u32 = 0;
-
     let mut cursor = tree.walk();
     crate::common::walk_nodes(&mut cursor, &mut |node| match node.kind() {
         "function_definition" => functions += 1,
         "class_definition" => classes += 1,
         _ => {}
     });
-
     (functions, classes)
 }
 
-fn count_definitions_js(content: &str, is_ts: bool) -> (u32, u32) {
-    let mut parser = tree_sitter::Parser::new();
-    let lang_result = if is_ts {
-        parser.set_language(&tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into())
-    } else {
-        parser.set_language(&tree_sitter_javascript::LANGUAGE.into())
-    };
-    if let Err(e) = lang_result {
-        eprintln!(
-            "health::monsters: set_language({}) failed: {e}",
-            if is_ts { "ts" } else { "js" }
-        );
-        return (0, 0);
-    }
-
-    let tree = match parser.parse(content, None) {
-        Some(t) => t,
-        None => return (0, 0),
-    };
-
+/// Walk a parsed tree counting JS/TS function/class definitions.
+fn count_js_in_tree(tree: &tree_sitter::Tree) -> (u32, u32) {
     let mut functions: u32 = 0;
     let mut classes: u32 = 0;
-
     let mut cursor = tree.walk();
     crate::common::walk_nodes(&mut cursor, &mut |node| match node.kind() {
         "function_declaration" | "arrow_function" | "method_definition"
@@ -100,23 +69,48 @@ fn count_definitions_js(content: &str, is_ts: bool) -> (u32, u32) {
         "class_declaration" => classes += 1,
         _ => {}
     });
-
     (functions, classes)
 }
 
 /// Pure per-file analysis. Returns `None` when the file is too small to be
 /// a "monster" or when reading/parsing fails — callers should treat that
 /// as "this file produces no finding" rather than as an error.
-fn analyze_monster_file(abs_path: &Path, rel_path: String, ext: &str) -> Option<MonsterFile> {
-    let content = fs::read_to_string(abs_path).ok()?;
+fn analyze_monster_file(
+    abs_path: &Path,
+    rel_path: String,
+    ext: &str,
+    ctx: Option<&ScanContext>,
+) -> Option<MonsterFile> {
+    let content_arc: Arc<String> = if let Some(c) = ctx {
+        c.read_file(&rel_path, abs_path)?
+    } else {
+        Arc::new(fs::read_to_string(abs_path).ok()?)
+    };
+    let content = content_arc.as_str();
 
     let line_count = content.lines().filter(|l| !l.trim().is_empty()).count() as u32;
     let severity = severity_for_lines(line_count)?;
 
     let (functions, classes) = match ext {
-        "py" => count_definitions_python(&content),
-        "ts" | "tsx" | "mts" | "cts" => count_definitions_js(&content, true),
-        _ => count_definitions_js(&content, false),
+        "py" => {
+            let tree = parse_or_cached(ctx, &rel_path, CtxLang::Python, content)?;
+            count_python_in_tree(&tree)
+        }
+        "ts" | "mts" | "cts" => {
+            let tree = parse_or_cached(ctx, &rel_path, CtxLang::TypeScript, content)?;
+            count_js_in_tree(&tree)
+        }
+        "tsx" => {
+            let tree = parse_or_cached(ctx, &rel_path, CtxLang::Tsx, content)?;
+            count_js_in_tree(&tree)
+        }
+        "js" | "mjs" | "cjs" | "jsx" => {
+            let tree = parse_or_cached(ctx, &rel_path, CtxLang::JavaScript, content)?;
+            count_js_in_tree(&tree)
+        }
+        // Languages we don't tree-sitter parse: still report line count,
+        // but functions/classes are reported as 0 (same as before).
+        _ => (0, 0),
     };
 
     Some(MonsterFile {
@@ -130,6 +124,18 @@ fn analyze_monster_file(abs_path: &Path, rel_path: String, ext: &str) -> Option<
 
 #[pyfunction]
 pub fn scan_monsters(path: &str) -> PyResult<MonstersResult> {
+    scan_monsters_inner(path, None)
+}
+
+#[pyfunction]
+pub fn scan_monsters_with_context(
+    ctx: &ScanContext,
+    path: &str,
+) -> PyResult<MonstersResult> {
+    scan_monsters_inner(path, Some(ctx))
+}
+
+fn scan_monsters_inner(path: &str, ctx: Option<&ScanContext>) -> PyResult<MonstersResult> {
     let root = Path::new(path);
     if !root.is_dir() {
         return Err(pyo3::exceptions::PyValueError::new_err(
@@ -140,7 +146,7 @@ pub fn scan_monsters(path: &str) -> PyResult<MonstersResult> {
     let mut monsters: Vec<MonsterFile> = Vec::new();
 
     for src in collect_source_files(root, &WalkOpts::default()) {
-        if let Some(m) = analyze_monster_file(&src.abs_path, src.rel_path, src.ext.as_str()) {
+        if let Some(m) = analyze_monster_file(&src.abs_path, src.rel_path, src.ext.as_str(), ctx) {
             monsters.push(m);
         }
     }
@@ -182,7 +188,7 @@ pub fn scan_monsters_files(root: &str, files: Vec<String>) -> PyResult<MonstersR
         if !abs_path.is_file() {
             continue;
         }
-        if let Some(m) = analyze_monster_file(&abs_path, rel_norm, &ext_lower) {
+        if let Some(m) = analyze_monster_file(&abs_path, rel_norm, &ext_lower, None) {
             monsters.push(m);
         }
     }
