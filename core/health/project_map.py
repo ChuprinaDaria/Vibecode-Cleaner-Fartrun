@@ -8,7 +8,7 @@ from pathlib import Path
 from core.health.models import (
     ConfigFile, ConfigInventoryResult, HealthFinding, HealthReport,
 )
-from core.health import tips
+from core.health import cache, tips
 
 log = logging.getLogger(__name__)
 
@@ -86,8 +86,23 @@ def scan_config_inventory(project_dir: str) -> ConfigInventoryResult:
     )
 
 
-def run_all_checks(project_dir: str) -> HealthReport:
-    """Run all Phase 1 checks and assemble a HealthReport."""
+def run_all_checks(project_dir: str, *, use_cache: bool = True) -> HealthReport:
+    """Run all Phase 1 checks and assemble a HealthReport.
+
+    When `use_cache` is true (the default) and the project is a clean git
+    working tree, the result for the current HEAD commit is reused from
+    on-disk cache instead of re-running every scanner. Pass `use_cache=False`
+    to force a fresh scan (CLI `--no-cache`, tests, debugging).
+    """
+    if use_cache:
+        cached = cache.get(project_dir)
+        if cached is not None:
+            log.info(
+                "Using cached scan for %s @ %s",
+                project_dir, (cache.head_hash(project_dir) or "")[:8],
+            )
+            return cached
+
     report = HealthReport(project_dir=project_dir)
 
     _rust_available = False
@@ -386,5 +401,8 @@ def run_all_checks(project_dir: str) -> HealthReport:
         save_report_md(report)
     except Exception as e:
         log.warning("Could not save .md report: %s", e)
+
+    if use_cache:
+        cache.put(project_dir, report)
 
     return report
