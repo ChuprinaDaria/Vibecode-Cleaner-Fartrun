@@ -39,6 +39,46 @@ max_snapshots = 50
 [haiku]
 api_key = ""
 
+# Multi-provider AI configuration
+# provider: "anthropic" (default), "openai", or use base_url for others
+# Supported: Anthropic, OpenAI, DeepSeek, OpenRouter, NVIDIA NIM, HuggingFace Inference
+[ai]
+provider = "anthropic"
+api_key = ""
+model = ""       # leave empty for provider default
+base_url = ""    # leave empty for provider default
+
+# Examples:
+# DeepSeek:
+#   provider = "openai"
+#   api_key = "sk-..."
+#   model = "deepseek-coder"
+#   base_url = "https://api.deepseek.com"
+#
+# OpenRouter:
+#   provider = "openai"
+#   api_key = "sk-or-..."
+#   model = "openai/gpt-4o"
+#   base_url = "https://openrouter.ai/api/v1"
+#
+# NVIDIA NIM:
+#   provider = "openai"
+#   api_key = "nvapi-..."
+#   model = "deepseek-ai/deepseek-v4-flash"
+#   base_url = "https://integrate.api.nvidia.com/v1"
+#
+# HuggingFace Inference:
+#   provider = "openai"
+#   api_key = "hf_..."
+#   model = "meta-llama/Llama-3.3-70B-Instruct"
+#   base_url = "https://router.huggingface.co/v1"
+#
+# Azure OpenAI:
+#   provider = "openai"
+#   api_key = "..."
+#   model = "gpt-4o"
+#   base_url = "https://<resource>.openai.azure.com/openai/deployments/<deployment>/v1"
+
 [safety_net]
 max_save_points = 20
 auto_gitignore = true

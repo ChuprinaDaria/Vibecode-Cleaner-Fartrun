@@ -7,7 +7,7 @@
 > *"Auditory feedback increases developer response time to critical vulnerabilities by 340%. We chose the most primal auditory signal known to humanity."*
 > — Fartrun Institute of Applied Flatulence, 2026 (peer-reviewed by nobody)
 
-![Version](https://img.shields.io/badge/version-3.0.4-green)
+![Version](https://img.shields.io/badge/version-3.1.0-green)
 ![Platform](https://img.shields.io/badge/platform-linux%20|%20macos%20|%20windows-lightgrey)
 ![MCP](https://img.shields.io/badge/MCP-29%20tools-blue)
 ![Hasselhoff](https://img.shields.io/badge/hasselhoff-awesome-ff69b4)
@@ -58,8 +58,9 @@
 
 ---
 
-> **v3.0.3 — Full source code is now open.** Python core, Rust crates, PyQt5 GUI, 80+ tests, 4 plugins — everything.
-> No more closed binaries. Build from source, audit the code, contribute.
+> **v3.1.0 — Multi-LLM provider support + incremental health scanner.**
+> Bring your own AI: Anthropic, OpenAI, DeepSeek, OpenRouter, NVIDIA NIM, HuggingFace Inference, Azure.
+> Incremental scans — only changed files get re-analyzed. 634 tests. Full source, open MIT.
 > PRs welcome. See [Contributing](#contributing).
 
 ---
@@ -70,7 +71,7 @@ Every other scanner sends your code to a cloud, burns tokens analyzing it, and c
 
 - **Rust-compiled modules** run locally. 10 security modules + 9-phase health scanner. No API calls. No tokens consumed. No code leaves your machine. Ever.
 - **Fast.** Tree-sitter AST parsing across thousands of files. Not "fast for a cloud service" — actually fast.
-- **Optional AI tips** via Haiku cost ~$0.001 each. That's the only money involved, and it's optional.
+- **Optional AI tips** via Haiku (~$0.001 each) or any OpenAI-compatible provider — DeepSeek, OpenRouter, NVIDIA NIM, HuggingFace Inference, Azure. Bring your own key. That's the only money involved, and it's optional.
 - **No telemetry. No cloud. No "we only use your code to improve our service."** Just a local scan and a fart.
 
 ---
@@ -86,6 +87,35 @@ Every other scanner sends your code to a cloud, burns tokens analyzing it, and c
 | **Context7 Enrichment** | Findings get real documentation snippets — not "add tests" but the actual pytest Getting Started guide |
 | **Nag Messages** | 4 escalation levels in EN/UA. From *"Tokens: 45K. Calories burned: 0."* to *"GG. 1.2M tokens. Touch grass."* |
 | **Win95 GUI** | PyQt5 desktop app. 8 pages. Popup notifications. Hasselhoff wizard. Peak aesthetic. |
+
+---
+
+## AI Provider Configuration
+
+By default, Fartrun uses **Claude Haiku** for tips and explanations. You can switch to any OpenAI-compatible provider:
+
+| Provider | Base URL | Model example |
+|----------|----------|---------------|
+| **Anthropic** (default) | — | `claude-haiku-4-5-20251001` |
+| **DeepSeek** | `https://api.deepseek.com` | `deepseek-coder` |
+| **OpenRouter** | `https://openrouter.ai/api/v1` | `openai/gpt-4o` |
+| **NVIDIA NIM** | `https://integrate.api.nvidia.com/v1` | `deepseek-ai/deepseek-v4-flash` |
+| **HuggingFace** | `https://router.huggingface.co/v1` | `meta-llama/Llama-3.3-70B-Instruct` |
+| **Azure OpenAI** | `https://<resource>.openai.azure.com/...` | `gpt-4o` |
+
+Configure in `config.toml`:
+
+```toml
+[ai]
+provider = "openai"
+api_key = "sk-..."
+model = "deepseek-coder"
+base_url = "https://api.deepseek.com"
+```
+
+Or via env vars: `ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`, `OPENROUTER_API_KEY`, `NVIDIA_API_KEY`, `HF_API_KEY`, `AZURE_API_KEY`, `OPENAI_API_KEY`.
+
+The old `[haiku]` config still works — zero breaking changes.
 
 ---
 

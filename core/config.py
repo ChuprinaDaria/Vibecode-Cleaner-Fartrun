@@ -49,6 +49,12 @@ DEFAULTS = {
     "haiku": {
         "api_key": "",
     },
+    "ai": {
+        "provider": "anthropic",
+        "api_key": "",
+        "model": "",
+        "base_url": "",
+    },
 }
 
 

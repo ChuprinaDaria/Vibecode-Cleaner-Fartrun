@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "claude-monitor"
-version = "3.0.4"
+version = "3.1.0"
 description = "Dev environment monitoring platform — Win95 style"
 requires-python = ">=3.11"
 dependencies = [
@@ -19,6 +19,7 @@ dependencies = [
 [project.optional-dependencies]
 http = ["starlette>=0.36", "uvicorn>=0.27"]
 security = ["pip-audit>=2.6"]
+ai = ["anthropic>=0.30", "openai>=1.30"]
 dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
 
 [project.scripts]
