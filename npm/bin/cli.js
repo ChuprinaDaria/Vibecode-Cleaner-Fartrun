@@ -32,7 +32,7 @@ function getPlatform() {
   if (platform === "darwin" && arch === "x64") return { key: "macos", file: "fartrun-macos-x64.zip" };
   if (platform === "darwin" && arch === "arm64") {
     // Prefer native arm64 build, fall back to x64 via Rosetta
-    return { key: "macos", file: "fartrun-macos-arm64.zip", fallback: "fartrun-macos-arm64.zip" };
+    return { key: "macos", file: "fartrun-macos-arm64.zip", fallback: "fartrun-macos-x64.zip" };
   }
   if (platform === "win32" && arch === "x64") return { key: "windows", file: "fartrun-windows-x64.zip" };
 
