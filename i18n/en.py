@@ -60,7 +60,7 @@ STRINGS = {
     # Main window
     "window_title": "fart.run & awesome Hasselhoff — Dev Monitor",
     "ready": "Ready",
-    "about_text": "Vibecode Cleaner Fartrun & Awesome Hasselhoff\nv3.0.4\n\nMade by Daria Chuprina\nbecause she can \U0001f47e",
+    "about_text": "Vibecode Cleaner Fartrun & Awesome Hasselhoff\nv3.1.0\n\nMade by Daria Chuprina\nbecause she can \U0001f47e",
     "menu_file": "File",
     "menu_tools": "Tools",
     "menu_help": "Help",

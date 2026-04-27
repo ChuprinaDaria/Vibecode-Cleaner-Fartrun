@@ -60,7 +60,7 @@ STRINGS = {
     # Головне вікно
     "window_title": "fart.run & awesome Hasselhoff — Dev Monitor",
     "ready": "Готово",
-    "about_text": "Vibecode Cleaner Fartrun & Awesome Hasselhoff\nv3.0.4\n\nЗроблено Дарією Чупріною\nбо вона може \U0001f47e",
+    "about_text": "Vibecode Cleaner Fartrun & Awesome Hasselhoff\nv3.1.0\n\nЗроблено Дарією Чупріною\nбо вона може \U0001f47e",
     "menu_file": "Файл",
     "menu_tools": "Інструменти",
     "menu_help": "Довідка",

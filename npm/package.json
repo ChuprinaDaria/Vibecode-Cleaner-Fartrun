@@ -1,6 +1,6 @@
 {
   "name": "fartrun",
-  "version": "3.0.5",
+  "version": "3.1.0",
   "description": "MCP server installer \u2014 Rust-powered code scanner for vibe-coded projects. 29 tools, zero tokens, zero cloud.",
   "keywords": [
     "mcp",
