@@ -291,4 +291,11 @@ jobs:
         working-directory: npm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public
+        run: |
+          CURRENT=$(npm view fartrun version 2>/dev/null || echo "0.0.0")
+          LOCAL=$(node -p "require('./package.json').version")
+          if [ "$CURRENT" = "$LOCAL" ]; then
+            echo "npm: $LOCAL already published — skipping"
+          else
+            npm publish --access public
+          fi
