@@ -51,7 +51,7 @@ Download includes:
 | macOS | `~/.local/bin/fartrun` |
 | Windows | `%LOCALAPPDATA%\fartrun\fartrun.exe` |
 
-The installer sets executable permissions on Linux/macOS (`chmod +x`). On Windows, the directory is added to the user's PATH if not already present.
+The installer sets executable permissions on Linux/macOS (`chmod +x`). **On Windows, the installer automatically adds the install directory to your user PATH** via the registry API (`[Environment]::SetEnvironmentVariable`), bypassing the 2047-character GUI limit. Restart your terminal after install.
 
 ### MCP Configuration
 
@@ -107,7 +107,7 @@ The installer only configures tools it detects on the system (by checking for th
 
 ### `npx fartrun@latest uninstall`
 
-Removes the binary and MCP configuration from all detected tools.
+Removes the binary, MCP configuration from all detected tools, and the PATH entry (Windows).
 
 ### `npx fartrun@latest update`
 
@@ -124,12 +124,10 @@ Shows:
 
 | Flag | Description |
 |------|-------------|
-| `--claude-only` | Only configure Claude Code |
-| `--cursor-only` | Only configure Cursor |
-| `--windsurf-only` | Only configure Windsurf |
-| `--no-mcp` | Skip MCP configuration, only install binary |
-| `--bin-dir <path>` | Override binary installation directory |
-| `--verbose` | Show detailed output |
+| `--claude` | Only configure Claude Code |
+| `--cursor` | Only configure Cursor |
+| `--windsurf` | Only configure Windsurf |
+| `--no-path` | Skip automatic PATH modification (Windows) |
 
 ## Manual Installation
 
@@ -151,7 +149,13 @@ mkdir -p ~/.local/bin
 
 ### Binary not found after install
 
-Ensure `~/.local/bin` is in your PATH:
+**Windows:** The installer adds the directory to PATH automatically. Restart your terminal. If it still doesn't work, run:
+```powershell
+[Environment]::GetEnvironmentVariable('PATH', 'User')
+```
+and verify `%LOCALAPPDATA%\fartrun` is listed. If not, re-run `npx fartrun@latest install`.
+
+**Linux/macOS:** Ensure `~/.local/bin` is in your PATH:
 ```bash
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
