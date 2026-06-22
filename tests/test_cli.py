@@ -38,6 +38,26 @@ def test_no_args_prints_logo_and_help(isolated, capsys):
     assert "save" in out
 
 
+def test_version_flag(isolated, capsys):
+    """fartrun --version prints version string and exits 0."""
+    import re
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["--version"])
+    out = capsys.readouterr().out
+    assert exc_info.value.code == 0
+    assert re.match(r"fartrun \d+\.\d+\.\d+", out.strip())
+
+
+def test_version_short_flag(isolated, capsys):
+    """fartrun -V also works."""
+    import re
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["-V"])
+    out = capsys.readouterr().out
+    assert exc_info.value.code == 0
+    assert re.match(r"fartrun \d+\.\d+\.\d+", out.strip())
+
+
 def test_status_on_empty_project(isolated, capsys):
     rc = cli.main(["status"])
     out = capsys.readouterr().out

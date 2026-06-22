@@ -46,24 +46,14 @@ async def call_tool(name: str, arguments: dict) -> list[mcp_types.TextContent]:
         return err(f"{type(e).__name__}: {e}")
 
 
-def _get_version() -> str:
-    try:
-        import tomllib
-        pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
-        with open(pyproject, "rb") as f:
-            return tomllib.load(f).get("project", {}).get("version", "?")
-    except Exception:
-        return "?"
-
-
 def _log_startup(transport: str, port: int | None = None) -> None:
     try:
-        version = _get_version()
+        from core.version import __version__
         d = db()
         extra = f", port={port}" if port else ""
         log.info(
             "fartrun MCP server starting (v%s, transport=%s%s, db=%s, tools=%d)",
-            version, transport, extra, d.path, len(TOOL_DEFS),
+            __version__, transport, extra, d.path, len(TOOL_DEFS),
         )
     except Exception as e:
         log.warning("startup banner failed: %s", e)
@@ -104,10 +94,11 @@ async def _run_http(port: int) -> None:
                              server.create_initialization_options())
 
     async def handle_health(request):
+        from core.version import __version__
         return JSONResponse({
             "status": "ok",
             "server": "fartrun",
-            "version": _get_version(),
+            "version": __version__,
             "tools": len(TOOL_DEFS),
             "transport": "http+sse",
         })
