@@ -7,7 +7,7 @@ const os = require("os");
 const https = require("https");
 const crypto = require("crypto");
 const zlib = require("zlib");
-const { execSync } = require("child_process");
+const { execFileSync } = require("child_process");
 
 const REPO = "ChuprinaDaria/Vibecode-Cleaner-Fartrun";
 const VERSION = require(path.join(__dirname, "..", "package.json")).version;
@@ -283,28 +283,49 @@ function extractZip(archivePath, destDir) {
 
 // --- Windows PATH management (bypasses 2047-char GUI limit) ---
 
+/** Normalize a Windows path for comparison: strip quotes, trailing slashes, lowercase. */
+function normalizeWindowsPath(p) {
+  return p.replace(/^"|"$/g, "").replace(/\\+$/, "").replace(/\/+$/, "").toLowerCase();
+}
+
+/** Read the current user PATH from the Windows registry (supports 32,767 chars). */
+function getUserPath() {
+  return execFileSync("powershell", [
+    "-NoProfile", "-Command",
+    "[Environment]::GetEnvironmentVariable('PATH', 'User')"
+  ], { encoding: "utf8" }).trim();
+}
+
+/** Write a new user PATH value to the Windows registry. */
+function setUserPath(value) {
+  execFileSync("powershell", [
+    "-NoProfile", "-Command",
+    `[Environment]::SetEnvironmentVariable('PATH', '${value}', 'User')`
+  ], { encoding: "utf8" });
+}
+
+/**
+ * Add a directory to the user's Windows PATH via the registry.
+ * Bypasses the 2047-character GUI limit (registry supports 32,767).
+ * @param {string} dir - Absolute path to add
+ * @returns {boolean} true if PATH was modified
+ */
 function addToWindowsPath(dir) {
   if (os.platform() !== "win32") return false;
 
   try {
-    // Read current user PATH from registry (supports 32,767 chars — GUI caps at 2047)
-    const current = execSync(
-      'powershell -NoProfile -Command "[Environment]::GetEnvironmentVariable(\'PATH\', \'User\')"',
-      { encoding: "utf8" }
-    ).trim();
+    const current = getUserPath();
+    const normalizedDir = normalizeWindowsPath(dir);
 
     // Already in PATH — nothing to do
-    if (current.split(";").some((p) => p.toLowerCase() === dir.toLowerCase())) {
+    if (current.split(";").some((p) => normalizeWindowsPath(p) === normalizedDir)) {
       console.log(`${DIM}${dir} already in PATH${RESET}`);
       return false;
     }
 
     // Append and write back via registry API
     const updated = current ? `${current};${dir}` : dir;
-    execSync(
-      `powershell -NoProfile -Command "[Environment]::SetEnvironmentVariable('PATH', '${updated.replace(/'/g, "''")}', 'User')"`,
-      { encoding: "utf8" }
-    );
+    setUserPath(updated);
 
     // Also add to current process so it works immediately
     process.env.PATH = `${process.env.PATH};${dir}`;
@@ -318,22 +339,22 @@ function addToWindowsPath(dir) {
   }
 }
 
+/**
+ * Remove a directory from the user's Windows PATH via the registry.
+ * @param {string} dir - Absolute path to remove
+ * @returns {boolean} true if PATH was modified
+ */
 function removeFromWindowsPath(dir) {
   if (os.platform() !== "win32") return false;
 
   try {
-    const current = execSync(
-      'powershell -NoProfile -Command "[Environment]::GetEnvironmentVariable(\'PATH\', \'User\')"',
-      { encoding: "utf8" }
-    ).trim();
+    const current = getUserPath();
+    const normalizedDir = normalizeWindowsPath(dir);
 
-    const entries = current.split(";").filter((p) => p && p.toLowerCase() !== dir.toLowerCase());
+    const entries = current.split(";").filter((p) => p && normalizeWindowsPath(p) !== normalizedDir);
     const updated = entries.join(";");
 
-    execSync(
-      `powershell -NoProfile -Command "[Environment]::SetEnvironmentVariable('PATH', '${updated.replace(/'/g, "''")}', 'User')"`,
-      { encoding: "utf8" }
-    );
+    setUserPath(updated);
 
     console.log(`${GREEN}Removed ${dir} from user PATH${RESET}`);
     return true;
@@ -562,13 +583,18 @@ if (!command || command === "--help" || command === "-h") {
     const settingsPath = getSettingsPath(client);
     if (settingsPath && fs.existsSync(settingsPath)) {
       try {
-        const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+        const raw = fs.readFileSync(settingsPath, "utf8");
+        const settings = JSON.parse(raw);
         if (settings.mcpServers && settings.mcpServers.fartrun) {
           delete settings.mcpServers.fartrun;
           fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
           console.log(`${GREEN}Removed MCP config from ${settingsPath}${RESET}`);
+        } else {
+          console.log(`${DIM}No fartrun config in ${settingsPath}${RESET}`);
         }
-      } catch { /* ignore parse errors */ }
+      } catch (err) {
+        console.error(`${YELLOW}Could not update ${settingsPath}: ${err.message}${RESET}`);
+      }
     }
   }
 
