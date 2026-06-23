@@ -146,9 +146,13 @@ Download from [Releases](https://github.com/ChuprinaDaria/Vibecode-Cleaner-Fartr
 ```bash
 git clone https://github.com/ChuprinaDaria/Vibecode-Cleaner-Fartrun.git
 cd Vibecode-Cleaner-Fartrun
-pip install -e ".[http]"        # Core + HTTP MCP server
+pip install -e ".[http,watch]"  # Core + HTTP MCP server + GUI watch mode
 
-# Rust crates (optional, for native speed)
+# Optional: Rust crates for native speed (10-100x faster scans)
+# Prerequisites: Rust toolchain (rustup) + maturin
+#   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh   # Linux/macOS
+#   winget install Rustlang.Rustup                                   # Windows
+#   pip install -e ".[build]"                                        # installs maturin
 cd crates/health && maturin develop --release && cd ../..
 cd crates/sentinel && maturin develop --release && cd ../..
 
@@ -158,6 +162,8 @@ fartrun-mcp                     # MCP stdio
 fartrun-mcp-http --port 3001    # MCP HTTP/SSE
 python -m gui.app               # Desktop GUI (requires PyQt5)
 ```
+
+> **Extras:** `[http]` HTTP MCP server · `[watch]` GUI test-watch mode · `[build]` Rust crate build (maturin) · `[ai]` extra LLM providers · `[security]` pip-audit · `[dev]` test suite
 
 ### CLI
 
