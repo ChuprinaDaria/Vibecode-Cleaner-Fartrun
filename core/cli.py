@@ -467,9 +467,13 @@ def cmd_gui(args) -> int:
 # ------------------------------------------------------------ entrypoint
 
 def build_parser() -> argparse.ArgumentParser:
+    from core.version import __version__
+
     p = argparse.ArgumentParser(
         prog="fartrun", description="vibe-coder safety net — with farts",
     )
+    p.add_argument("--version", "-V", action="version",
+                   version=f"%(prog)s {__version__}")
     sub = p.add_subparsers(dest="command")
 
     def with_dir(sp):
