@@ -94,7 +94,10 @@ jobs:
           $PYTHON_X64 -m venv .venv
           source .venv/bin/activate
           python -m pip install --upgrade pip setuptools wheel
-          python -m pip install maturin pyinstaller ".[http]"
+          # Force prebuilt wheel for cryptography — it pulls in openssl-sys which fails
+          # to cross-compile (host=arm64, target=x86_64) under Rosetta on ARM runners.
+          python -m pip install --only-binary=cryptography "cryptography>=42"
+          python -m pip install --prefer-binary maturin pyinstaller ".[http]"
           cd crates/health && maturin develop --release --target x86_64-apple-darwin && cd ../..
           cd crates/sentinel && maturin develop --release --target x86_64-apple-darwin && cd ../..
           pyinstaller fartrun.spec --noconfirm
