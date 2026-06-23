@@ -7,6 +7,7 @@ const os = require("os");
 const https = require("https");
 const crypto = require("crypto");
 const zlib = require("zlib");
+const { execFileSync } = require("child_process");
 
 const REPO = "ChuprinaDaria/Vibecode-Cleaner-Fartrun";
 const VERSION = require(path.join(__dirname, "..", "package.json")).version;
@@ -280,6 +281,89 @@ function extractZip(archivePath, destDir) {
   });
 }
 
+// --- Windows PATH management (bypasses 2047-char GUI limit) ---
+
+/** Normalize a Windows path for comparison: strip quotes, trailing slashes, lowercase. */
+function normalizeWindowsPath(p) {
+  return p.replace(/^"|"$/g, "").replace(/\\+$/, "").replace(/\/+$/, "").toLowerCase();
+}
+
+/** Read the current user PATH from the Windows registry (supports 32,767 chars). */
+function getUserPath() {
+  return execFileSync("powershell", [
+    "-NoProfile", "-Command",
+    "[Environment]::GetEnvironmentVariable('PATH', 'User')"
+  ], { encoding: "utf8" }).trim();
+}
+
+/** Write a new user PATH value to the Windows registry. */
+function setUserPath(value) {
+  execFileSync("powershell", [
+    "-NoProfile", "-Command",
+    `[Environment]::SetEnvironmentVariable('PATH', '${value}', 'User')`
+  ], { encoding: "utf8" });
+}
+
+/**
+ * Add a directory to the user's Windows PATH via the registry.
+ * Bypasses the 2047-character GUI limit (registry supports 32,767).
+ * @param {string} dir - Absolute path to add
+ * @returns {boolean} true if PATH was modified
+ */
+function addToWindowsPath(dir) {
+  if (os.platform() !== "win32") return false;
+
+  try {
+    const current = getUserPath();
+    const normalizedDir = normalizeWindowsPath(dir);
+
+    // Already in PATH — nothing to do
+    if (current.split(";").some((p) => normalizeWindowsPath(p) === normalizedDir)) {
+      console.log(`${DIM}${dir} already in PATH${RESET}`);
+      return false;
+    }
+
+    // Append and write back via registry API
+    const updated = current ? `${current};${dir}` : dir;
+    setUserPath(updated);
+
+    // Also add to current process so it works immediately
+    process.env.PATH = `${process.env.PATH};${dir}`;
+
+    console.log(`${GREEN}Added ${dir} to user PATH${RESET}`);
+    return true;
+  } catch (err) {
+    console.error(`${YELLOW}Could not update PATH automatically: ${err.message}${RESET}`);
+    console.log(`${YELLOW}Add it manually: System Properties → Environment Variables → PATH${RESET}`);
+    return false;
+  }
+}
+
+/**
+ * Remove a directory from the user's Windows PATH via the registry.
+ * @param {string} dir - Absolute path to remove
+ * @returns {boolean} true if PATH was modified
+ */
+function removeFromWindowsPath(dir) {
+  if (os.platform() !== "win32") return false;
+
+  try {
+    const current = getUserPath();
+    const normalizedDir = normalizeWindowsPath(dir);
+
+    const entries = current.split(";").filter((p) => p && normalizeWindowsPath(p) !== normalizedDir);
+    const updated = entries.join(";");
+
+    setUserPath(updated);
+
+    console.log(`${GREEN}Removed ${dir} from user PATH${RESET}`);
+    return true;
+  } catch (err) {
+    console.error(`${YELLOW}Could not update PATH: ${err.message}${RESET}`);
+    return false;
+  }
+}
+
 // --- Main download + extract flow ---
 
 async function downloadBinary() {
@@ -389,12 +473,14 @@ function printUsage() {
   Installs MCP server only. Desktop GUI → Releases page.
 
 ${GREEN}Usage:${RESET}
-  npx fartrun@latest install           Download MCP binary + configure editor
-  npx fartrun@latest install --claude   Claude Code only
-  npx fartrun@latest install --cursor   Cursor only
-  npx fartrun@latest install --windsurf Windsurf only
-  npx fartrun@latest mcp-config        Show MCP JSON config (manual setup)
-  npx fartrun@latest --help            This message
+  npx fartrun@latest install              Download MCP binary + configure editor
+  npx fartrun@latest install --claude     Claude Code only
+  npx fartrun@latest install --cursor     Cursor only
+  npx fartrun@latest install --windsurf   Windsurf only
+  npx fartrun@latest install --no-path    Skip PATH modification (Windows)
+  npx fartrun@latest uninstall            Remove binary + MCP config + PATH entry
+  npx fartrun@latest mcp-config           Show MCP JSON config (manual setup)
+  npx fartrun@latest --help               This message
 
 ${DIM}29 MCP tools. Rust security scanner. Zero tokens. Maximum flatulence.${RESET}
 `);
@@ -428,6 +514,12 @@ async function install(flags) {
 
   const binaryPath = await downloadBinary();
 
+  // Add install directory to PATH (Windows only, unless --no-path)
+  const skipPath = flags.includes("--no-path");
+  if (os.platform() === "win32" && !skipPath) {
+    addToWindowsPath(getInstallDir());
+  }
+
   const clients = [];
   if (flags.includes("--claude")) clients.push("claude-code");
   else if (flags.includes("--cursor")) clients.push("cursor");
@@ -439,13 +531,19 @@ async function install(flags) {
     if (configureMcp(binaryPath, client)) configured++;
   }
 
+  const pathNote = os.platform() === "win32"
+    ? skipPath
+      ? `${YELLOW}Remember to add ${getInstallDir()} to your PATH${RESET}`
+      : `${DIM}PATH updated — restart your terminal to pick it up${RESET}`
+    : `${YELLOW}Make sure ${getInstallDir()} is in your PATH${RESET}`;
+
   console.log(`
 ${GREEN}Done!${RESET} Fartrun MCP is ready.
 
   ${DIM}29 tools available. Restart your editor to pick them up.${RESET}
   ${DIM}Run "fartrun scan ." to try the CLI scanner.${RESET}
 
-  ${YELLOW}Make sure ${getInstallDir()} is in your PATH${RESET}
+  ${pathNote}
 
   ${DIM}Desktop GUI → download separately from Releases:${RESET}
   ${DIM}https://github.com/${REPO}/releases${RESET}
@@ -464,6 +562,43 @@ if (!command || command === "--help" || command === "-h") {
     console.error(`${RED}Error: ${err.message}${RESET}`);
     process.exit(1);
   });
+} else if (command === "uninstall") {
+  console.log(LOGO);
+  const installDir = getInstallDir();
+  const bin = path.join(installDir, os.platform() === "win32" ? "fartrun.exe" : "fartrun");
+
+  // Remove binary
+  if (fs.existsSync(bin)) {
+    fs.unlinkSync(bin);
+    console.log(`${GREEN}Removed ${bin}${RESET}`);
+  }
+
+  // Remove from PATH (Windows)
+  if (os.platform() === "win32") {
+    removeFromWindowsPath(installDir);
+  }
+
+  // Remove MCP configs
+  for (const client of ["claude-code", "cursor", "windsurf"]) {
+    const settingsPath = getSettingsPath(client);
+    if (settingsPath && fs.existsSync(settingsPath)) {
+      try {
+        const raw = fs.readFileSync(settingsPath, "utf8");
+        const settings = JSON.parse(raw);
+        if (settings.mcpServers && settings.mcpServers.fartrun) {
+          delete settings.mcpServers.fartrun;
+          fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+          console.log(`${GREEN}Removed MCP config from ${settingsPath}${RESET}`);
+        } else {
+          console.log(`${DIM}No fartrun config in ${settingsPath}${RESET}`);
+        }
+      } catch (err) {
+        console.error(`${YELLOW}Could not update ${settingsPath}: ${err.message}${RESET}`);
+      }
+    }
+  }
+
+  console.log(`\n${GREEN}Uninstalled.${RESET} Restart your terminal and editor.\n`);
 } else if (command === "mcp-config") {
   console.log(LOGO);
   printMcpConfig();
