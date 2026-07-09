@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/chuprinadaria-vibecode-cleaner-fartrun-badge.png)](https://mseep.ai/app/chuprinadaria-vibecode-cleaner-fartrun)
+
 <div align="center">
 
 # Vibecode Cleaner Fartrun & Awesome Hasselhoff
